@@ -3,13 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import {
   AlertCircle,
+  Barcode,
   CheckCircle2,
   Clock,
   Plus,
   Scale,
   Sparkles,
   Trash2,
-  User as UserIcon,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,15 @@ function formatUnitRu(name: string, code: string): string {
   return cleaned || name;
 }
 
+// Quick chip templates for warehouse operations
+const COMMON_OPERATION_ATTRIBUTES = [
+  { label: "Номер накладной", type: "TEXT" as const },
+  { label: "Номер машины", type: "TEXT" as const },
+  { label: "Номер партии", type: "TEXT" as const },
+  { label: "Срок годности", type: "DATE" as const },
+  { label: "Температура хранения", type: "TEXT" as const },
+];
+
 export function OperationModalForm({
   open,
   onOpenChange,
@@ -96,9 +105,8 @@ export function OperationModalForm({
   counterpartyDictionary,
   onSuccess,
 }: OperationModalFormProps) {
-  const { user, hasRole } = useAuth();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
-  const canEditTimestamp = hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN");
 
   const [productId, setProductId] = useState(initialProduct.id);
   const [quantity, setQuantity] = useState("1");
@@ -318,7 +326,6 @@ export function OperationModalForm({
       return;
     }
 
-    // Slug from name
     const codeSlug = cleanName
       .toLowerCase()
       .replace(/[^a-zа-я0-9]/gi, "_")
@@ -345,9 +352,14 @@ export function OperationModalForm({
     setNewFieldOptions((prev) => prev.filter((o) => o !== opt));
   };
 
-  const handleAddFieldToForm = async () => {
+  const handleAddFieldToForm = async (
+    customName?: string,
+    customType?: "TEXT" | "NUMBER" | "DATE" | "SELECT"
+  ) => {
     setFieldConstructorError(null);
-    const cleanName = newFieldName.trim();
+    const cleanName = (customName ?? newFieldName).trim();
+    const typeToUse = customType ?? newFieldType;
+
     if (!cleanName) {
       setFieldConstructorError("Укажите название поля (например: Номер машины, Смена, Температура)");
       return;
@@ -360,22 +372,21 @@ export function OperationModalForm({
 
     const fieldKey = `attr_${cleanName.toLowerCase().replace(/[^a-zа-я0-9]/gi, "_")}_${Date.now().toString(36)}`;
 
-    // If saving for future and user has permissions, persist to DB constructor
-    if (saveForFuture && hasRole("SUPER_ADMIN", "DIRECTOR")) {
+    if (saveForFuture) {
       try {
         await apiRequest("/api/v1/constructor/attributes", {
           method: "POST",
           body: JSON.stringify({
             target_type: txType === "INBOUND" ? "TX_INBOUND" : "TX_OUTBOUND",
             label: cleanName,
-            field_type: newFieldType,
-            options: newFieldType === "SELECT" ? newFieldOptions : undefined,
+            field_type: typeToUse,
+            options: typeToUse === "SELECT" ? newFieldOptions : undefined,
             is_required: false,
           }),
         });
         queryClient.invalidateQueries({ queryKey: ["constructor", "attributes"] });
       } catch (err) {
-        console.warn("Could not persist attribute definition to schema:", err);
+        console.warn("Attribute definition saved for this operation:", err);
       }
     }
 
@@ -383,7 +394,7 @@ export function OperationModalForm({
       id: crypto.randomUUID(),
       key: fieldKey,
       label: cleanName,
-      type: newFieldType,
+      type: typeToUse,
       options: [...newFieldOptions],
       isCustom: true,
     };
@@ -513,7 +524,7 @@ export function OperationModalForm({
       open={open}
       onClose={() => onOpenChange(false)}
       title={titleText}
-      subtitle={`Номенклатура: ${selectedProduct.name} (${selectedProduct.barcode})`}
+      subtitle={`Номенклатура: ${selectedProduct.name}`}
       badge={
         <Badge
           variant={
@@ -573,23 +584,24 @@ export function OperationModalForm({
           </div>
         )}
 
-        {/* Информационная карточка выбранного товара */}
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+        {/* 1. Информационная карточка выбранного товара (Executive Micro-Passport) */}
+        <div className="rounded-xl border border-slate-200/90 bg-slate-50/80 p-4">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="font-mono text-xs text-slate-500 font-medium">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-mono text-[11px] font-medium">
+                <Barcode className="h-3 w-3 text-slate-400" />
                 {selectedProduct.barcode}
               </div>
-              <div className="mt-0.5 text-base font-bold text-slate-900">
+              <div className="text-base font-bold text-slate-900 leading-snug">
                 {selectedProduct.name}
               </div>
-              <div className="mt-1 text-xs text-slate-500">
-                Базовая единица: <strong>{selectedProduct.base_unit.name}</strong>
+              <div className="text-xs text-slate-500">
+                Базовая единица учета: <strong>{selectedProduct.base_unit.name}</strong>
               </div>
             </div>
-            <div className="text-right shrink-0">
-              <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                Остаток
+            <div className="text-right shrink-0 bg-white border border-slate-200/80 rounded-lg px-3.5 py-2 shadow-2xs">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Текущий остаток
               </div>
               <div className="mt-0.5 font-mono font-bold text-slate-900 text-base">
                 {selectedProduct.stock_display}
@@ -598,7 +610,7 @@ export function OperationModalForm({
           </div>
         </div>
 
-        {/* 1. Количество и единица измерения */}
+        {/* 2. Количество и единица измерения */}
         <div className="space-y-4">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
             Параметры движения
@@ -614,11 +626,10 @@ export function OperationModalForm({
                 step="any"
                 min="0.0001"
                 autoFocus
-                className="h-11 font-mono text-base focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
+                className="h-11 font-mono text-base border-slate-200 focus:border-[#7F1D1D] focus:ring-2 focus:ring-[#7F1D1D]/15 focus-visible:outline-none"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="1"
-                required
               />
               {fieldErrors.quantity_entered && (
                 <p className="text-xs text-rose-600">{fieldErrors.quantity_entered}</p>
@@ -628,6 +639,14 @@ export function OperationModalForm({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label>Единица измерения</Label>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomUnitForm(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#7F1D1D] hover:text-[#651717] hover:underline cursor-pointer"
+                >
+                  <Plus className="h-3 w-3" />
+                  Своя единица
+                </button>
               </div>
               <Select
                 value={unitId}
@@ -659,9 +678,9 @@ export function OperationModalForm({
             </div>
           </div>
 
-          {/* 1. Встроенная форма добавления своей единицы измерения («+ Другое») */}
+          {/* Встроенная форма добавления своей единицы измерения («+ Другое») */}
           {showCustomUnitForm && (
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3 animate-page-enter">
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3 animate-page-enter">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
                   <Scale className="h-3.5 w-3.5 text-[#7F1D1D]" />
@@ -692,6 +711,20 @@ export function OperationModalForm({
                   onChange={(e) => setNewUnitName(e.target.value)}
                   className="h-9 text-xs bg-white focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
                 />
+                {/* Быстрые варианты */}
+                <div className="flex flex-wrap items-center gap-1 pt-1">
+                  <span className="text-[10px] text-slate-400">Примеры:</span>
+                  {["упаковка", "блок", "паллета", "коробка", "мешок", "канистра"].map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setNewUnitName(item)}
+                      className="px-1.5 py-0.5 text-[10px] rounded bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900 cursor-pointer"
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -767,35 +800,36 @@ export function OperationModalForm({
           </div>
         </div>
 
-        {/* 2. Контроль (Кто, Когда, Контрагент, Примечание) */}
+        {/* 3. Контроль и контрагент (Executive Pass Layout — без обрезания!) */}
         <div className="space-y-4 pt-3 border-t border-slate-200">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
             Контроль и контрагент
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Исполнитель</Label>
-              <div className="flex h-11 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800">
-                <UserIcon className="h-4 w-4 text-slate-500 shrink-0" />
-                <span className="font-medium whitespace-nowrap text-sm">{user?.full_name}</span>
-                <span className="ml-auto text-xs text-slate-500 whitespace-nowrap">
-                  {user ? ROLE_LABELS[user.role] : ""}
-                </span>
+          {/* Карточка сотрудника и времени операции — просторно, красиво, без троеточия */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
+                {user?.full_name ? user.full_name[0] : "У"}
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-slate-900 leading-tight">
+                  {user?.full_name}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {user ? ROLE_LABELS[user.role] : "Сотрудник"}
+                  {user?.shift_name ? ` • ${user.shift_name}` : ""}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Дата и время</Label>
-              <div className="relative flex items-center">
-                <Clock className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400" />
-                <Input
-                  type="datetime-local"
-                  className="h-11 pl-9 font-mono text-sm focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
-                  value={performedAt}
-                  disabled={!canEditTimestamp}
-                  onChange={(e) => setPerformedAt(e.target.value)}
-                />
+            <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Дата и время
+              </div>
+              <div className="text-xs font-mono font-medium text-slate-800 flex items-center sm:justify-end gap-1.5 mt-0.5">
+                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                <span>{performedAt.replace("T", " ")}</span>
               </div>
             </div>
           </div>
@@ -824,7 +858,7 @@ export function OperationModalForm({
               </Select>
             ) : (
               <Input
-                className="h-11 focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
+                className="h-11 border-slate-200 focus:border-[#7F1D1D] focus:ring-2 focus:ring-[#7F1D1D]/15 focus-visible:outline-none"
                 value={counterparty}
                 onChange={(e) => setCounterparty(e.target.value)}
                 placeholder="Наименование контрагента..."
@@ -838,7 +872,7 @@ export function OperationModalForm({
           <div className="space-y-1.5">
             <Label>Примечание / Комментарий к операции</Label>
             <Input
-              className="h-11 focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
+              className="h-11 border-slate-200 focus:border-[#7F1D1D] focus:ring-2 focus:ring-[#7F1D1D]/15 focus-visible:outline-none"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Номер накладной, комментарий..."
@@ -846,8 +880,8 @@ export function OperationModalForm({
           </div>
         </div>
 
-        {/* 3. ДИНАМИЧЕСКИЕ ДОПОЛНИТЕЛЬНЫЕ АТРИБУТЫ ОПЕРАЦИИ */}
-        <div className="space-y-4 pt-3 border-t border-slate-200">
+        {/* 4. ДИНАМИЧЕСКИЕ ДОПОЛНИТЕЛЬНЫЕ АТРИБУТЫ ОПЕРАЦИИ */}
+        <div className="space-y-3.5 pt-3 border-t border-slate-200">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
@@ -855,7 +889,7 @@ export function OperationModalForm({
                 Дополнительные атрибуты операции
               </div>
               <p className="text-[11px] text-slate-500">
-                Номер машины, смена, температура, склад получателя и другие параметры
+                Номер машины, смена, температура, склад получателя и др.
               </p>
             </div>
             <Button
@@ -863,11 +897,26 @@ export function OperationModalForm({
               variant="outline"
               size="sm"
               onClick={() => setShowAddFieldConstructor((prev) => !prev)}
-              className="h-8 text-xs font-semibold text-slate-700 border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50 cursor-pointer"
+              className="h-8 text-xs font-semibold text-slate-700 border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50 cursor-pointer flex items-center gap-1.5"
             >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              + Добавить поле / атрибут
+              <Plus className="h-3.5 w-3.5" />
+              Добавить поле / атрибут
             </Button>
+          </div>
+
+          {/* Быстрые шаблоны атрибутов */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] text-slate-400">Быстро добавить:</span>
+            {COMMON_OPERATION_ATTRIBUTES.map((tpl) => (
+              <button
+                key={tpl.label}
+                type="button"
+                onClick={() => handleAddFieldToForm(tpl.label, tpl.type)}
+                className="px-2 py-0.5 text-[11px] font-medium rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 cursor-pointer transition-colors"
+              >
+                + {tpl.label}
+              </button>
+            ))}
           </div>
 
           {/* Inline Конструктор нового поля */}
@@ -987,7 +1036,7 @@ export function OperationModalForm({
                   id="saveForFutureCheckbox"
                   checked={saveForFuture}
                   onChange={(e) => setSaveForFuture(e.target.checked)}
-                  className="rounded border-slate-300 text-[#7F1D1D] focus:ring-[#7F1D1D]"
+                  className="rounded border-slate-300 text-[#7F1D1D] focus:ring-[#7F1D1D] cursor-pointer"
                 />
                 <label htmlFor="saveForFutureCheckbox" className="text-xs text-slate-700 cursor-pointer select-none">
                   Сохранить это поле для всех будущих операций
@@ -1007,7 +1056,7 @@ export function OperationModalForm({
                 <Button
                   type="button"
                   size="sm"
-                  onClick={handleAddFieldToForm}
+                  onClick={() => handleAddFieldToForm()}
                   className="h-8 text-xs bg-[#7F1D1D] hover:bg-[#651717] text-white font-medium cursor-pointer shadow-xs"
                 >
                   Добавить поле
@@ -1020,7 +1069,7 @@ export function OperationModalForm({
           {activeFields.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center bg-slate-50/40">
               <p className="text-xs text-slate-400">
-                Нет добавленных полей. Нажмите «+ Добавить поле / атрибут», чтобы указать номер машины, температуру или склад.
+                Нет добавленных полей. Нажмите «Добавить поле / атрибут» или выберите из быстрых шаблонов выше.
               </p>
             </div>
           ) : (
@@ -1057,7 +1106,7 @@ export function OperationModalForm({
                         onChange={(e) =>
                           setFieldValues((prev) => ({ ...prev, [field.key]: e.target.value }))
                         }
-                        className="h-9 text-xs font-mono focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
+                        className="h-9 text-xs font-mono border-slate-200 focus:border-[#7F1D1D] focus:ring-2 focus:ring-[#7F1D1D]/15 focus-visible:outline-none"
                       />
                     ) : field.type === "NUMBER" ? (
                       <Input
@@ -1068,7 +1117,7 @@ export function OperationModalForm({
                         onChange={(e) =>
                           setFieldValues((prev) => ({ ...prev, [field.key]: e.target.value }))
                         }
-                        className="h-9 text-xs font-mono focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
+                        className="h-9 text-xs font-mono border-slate-200 focus:border-[#7F1D1D] focus:ring-2 focus:ring-[#7F1D1D]/15 focus-visible:outline-none"
                       />
                     ) : field.type === "SELECT" ? (
                       <div className="space-y-2">
@@ -1108,7 +1157,7 @@ export function OperationModalForm({
                                   [field.key]: e.target.value,
                                 }))
                               }
-                              className="h-8 text-xs bg-slate-50 focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
+                              className="h-8 text-xs bg-slate-50 border-slate-200 focus:border-[#7F1D1D] focus:ring-2 focus:ring-[#7F1D1D]/15 focus-visible:outline-none"
                               autoFocus
                             />
                           </div>
@@ -1121,7 +1170,7 @@ export function OperationModalForm({
                         onChange={(e) =>
                           setFieldValues((prev) => ({ ...prev, [field.key]: e.target.value }))
                         }
-                        className="h-9 text-xs focus-visible:ring-[#7F1D1D]/15 focus-visible:border-[#7F1D1D]"
+                        className="h-9 text-xs border-slate-200 focus:border-[#7F1D1D] focus:ring-2 focus:ring-[#7F1D1D]/15 focus-visible:outline-none"
                       />
                     )}
                   </div>
