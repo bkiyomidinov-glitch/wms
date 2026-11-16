@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: wms_core_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wms_core}
+      POSTGRES_USER: ${POSTGRES_USER:-wms_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wms_secure_password_change_me}
+      TZ: Asia/Dushanbe
+    ports:
+      - "5432:5432"
+    volumes:
+      - wms_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wms_user} -d ${POSTGRES_DB:-wms_core}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wms_core_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wms_user}:${POSTGRES_PASSWORD:-wms_secure_password_change_me}@db:5432/${POSTGRES_DB:-wms_core}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev_jwt_secret_change_in_production_wms_core_2026}
+      JWT_REFRESH_SECRET_KEY: ${JWT_REFRESH_SECRET_KEY:-dev_refresh_secret_change_in_production_wms_core_2026}
+      TIMEZONE: Asia/Dushanbe
+      AUTO_SEED: "true"
+      CORS_ORIGINS: http://localhost,http://localhost:5173,http://localhost:3000
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wms_core_web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  wms_pgdata:

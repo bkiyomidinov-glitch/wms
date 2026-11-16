@@ -1,0 +1,70 @@
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import AuthenticationError
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    verify_password,
+)
+from app.models.user import User
+from app.schemas.auth import TokenResponse, UserSummary
+from app.services.audit_service import record_audit
+
+
+def _build_token_response(user: User) -> TokenResponse:
+    return TokenResponse(
+        access_token=create_access_token(user.id, user.role, user.username),
+        refresh_token=create_refresh_token(user.id),
+        user=UserSummary(
+            id=str(user.id),
+            username=user.username,
+            full_name=user.full_name,
+            role=user.role,
+            shift_name=user.shift_name,
+            is_active=user.is_active,
+        ),
+    )
+
+
+async def authenticate_user(
+    db: AsyncSession,
+    *,
+    username: str,
+    password: str,
+    ip_address: str | None = None,
+) -> TokenResponse:
+    stmt = select(User).where(User.username == username.strip())
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user or not verify_password(password, user.password_hash):
+        raise AuthenticationError("Неверный логин или пароль")
+
+    if not user.is_active:
+        raise AuthenticationError("Учетная запись заблокирована. Обратитесь к администратору")
+
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="USER_LOGIN",
+        entity="user",
+        entity_id=user.id,
+        payload={"username": user.username, "role": user.role},
+        ip_address=ip_address,
+    )
+    await db.commit()
+    return _build_token_response(user)
+
+
+async def refresh_user_tokens(db: AsyncSession, *, refresh_token: str) -> TokenResponse:
+    payload = decode_refresh_token(refresh_token)
+    user_id = UUID(payload["sub"])
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise AuthenticationError("Пользователь не найден или деактивирован")
+    return _build_token_response(user)
