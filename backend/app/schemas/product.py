@@ -34,6 +34,7 @@ class ProductCreate(BaseModel):
     allow_negative_stock: bool = False
     allowed_units: list[AllowedUnitInput] = Field(default_factory=list)
     enabled_attribute_ids: list[UUID] = Field(default_factory=list)
+    configured_attributes: list[dict[str, Any]] = Field(default_factory=list)
     custom_attributes: dict[str, Any] = Field(default_factory=dict)
     is_active: bool = True
 
@@ -54,6 +55,7 @@ class ProductUpdate(BaseModel):
     allow_negative_stock: bool | None = None
     allowed_units: list[AllowedUnitInput] | None = None
     enabled_attribute_ids: list[UUID] | None = None
+    configured_attributes: list[dict[str, Any]] | None = None
     custom_attributes: dict[str, Any] | None = None
     is_active: bool | None = None
 
@@ -74,6 +76,7 @@ class ProductRead(BaseModel):
     stock_display: str = ""
     allow_negative_stock: bool
     enabled_attribute_ids: list[str]
+    configured_attributes: list[dict[str, Any]] = Field(default_factory=list)
     custom_attributes: dict[str, Any]
     is_active: bool
     created_at: datetime

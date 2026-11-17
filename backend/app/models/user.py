@@ -16,6 +16,9 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     shift_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    store_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("stores.id", ondelete="SET NULL"), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -27,3 +30,4 @@ class User(Base):
     )
 
     creator: Mapped["User | None"] = relationship("User", remote_side=[id], lazy="selectin")
+    store = relationship("Store", lazy="selectin")

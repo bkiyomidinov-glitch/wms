@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.enums import TransactionType
+from app.schemas.store import StoreRead
 from app.schemas.unit import UnitRead
 
 
@@ -14,7 +15,8 @@ class TransactionCreate(BaseModel):
     product_id: UUID
     quantity_entered: Decimal = Field(..., gt=Decimal("0"))
     unit_id: UUID
-    counterparty_name: str = Field(..., min_length=1, max_length=200)
+    store_id: UUID | None = None
+    counterparty_name: str | None = Field(default=None, max_length=200)
     performed_at: datetime | None = None
     custom_attributes: dict[str, Any] = Field(default_factory=dict)
     notes: str | None = Field(default=None, max_length=1000)
@@ -71,6 +73,7 @@ class TransactionRead(BaseModel):
     stock_before_base: Decimal
     stock_after_base: Decimal
     performed_by_user_id: UUID
+    store_id: UUID | None = None
     counterparty_name: str
     performed_at: datetime
     custom_attributes: dict[str, Any]
@@ -79,3 +82,4 @@ class TransactionRead(BaseModel):
     product: TransactionProductSummary
     unit: UnitRead
     performed_by: TransactionUserSummary
+    store: StoreRead | None = None

@@ -41,6 +41,9 @@ class Product(Base):
     enabled_attribute_ids: Mapped[list[str]] = mapped_column(
         JSONBType, default=list, nullable=False
     )
+    configured_attributes: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONBType, default=list, nullable=False
+    )
     custom_attributes: Mapped[dict[str, Any]] = mapped_column(
         JSONBType, default=dict, nullable=False
     )

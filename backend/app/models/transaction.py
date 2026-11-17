@@ -27,6 +27,9 @@ class InventoryTransaction(Base):
     performed_by_user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="RESTRICT"), index=True, nullable=False
     )
+    store_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("stores.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     counterparty_name: Mapped[str] = mapped_column(String(200), nullable=False)
     performed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), index=True, nullable=False
@@ -44,6 +47,7 @@ class InventoryTransaction(Base):
     product = relationship("Product", lazy="selectin")
     unit = relationship("UnitOfMeasure", lazy="selectin")
     performed_by = relationship("User", lazy="selectin")
+    store = relationship("Store", lazy="selectin")
 
     __table_args__ = (
         Index(
