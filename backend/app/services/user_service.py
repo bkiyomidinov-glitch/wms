@@ -40,6 +40,7 @@ async def create_user(
         password_hash=hash_password(payload.password),
         role=payload.role.value,
         shift_name=payload.shift_name.strip() if payload.shift_name else None,
+        store_id=payload.store_id,
         is_active=True,
         created_by=actor.id,
     )
@@ -57,6 +58,7 @@ async def create_user(
             "full_name": user.full_name,
             "role": user.role,
             "shift_name": user.shift_name,
+            "store_id": str(user.store_id) if user.store_id else None,
         },
         payload={"created_by": actor.username},
         ip_address=ip_address,
@@ -94,6 +96,7 @@ async def update_user(
         "full_name": target.full_name,
         "role": target.role,
         "shift_name": target.shift_name,
+        "store_id": str(target.store_id) if target.store_id else None,
         "is_active": target.is_active,
     }
 
@@ -103,6 +106,8 @@ async def update_user(
         target.role = payload.role.value
     if payload.shift_name is not None:
         target.shift_name = payload.shift_name.strip() or None
+    if payload.store_id is not None:
+        target.store_id = payload.store_id
     if payload.is_active is not None:
         if target.id == actor.id and not payload.is_active:
             raise PermissionDeniedError("Нельзя заблокировать собственную учетную запись")
@@ -114,6 +119,7 @@ async def update_user(
         "full_name": target.full_name,
         "role": target.role,
         "shift_name": target.shift_name,
+        "store_id": str(target.store_id) if target.store_id else None,
         "is_active": target.is_active,
     }
 
