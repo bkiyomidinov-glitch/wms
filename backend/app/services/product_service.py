@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -8,6 +9,8 @@ from app.core.exceptions import ConflictError, DomainValidationError, NotFoundEr
 from app.domain.enums import AttributeTargetType
 from app.models.category import Category
 from app.models.product import Product, ProductAllowedUnit
+from app.models.store import Store
+from app.models.transaction import InventoryTransaction
 from app.models.unit import UnitOfMeasure
 from app.models.user import User
 from app.schemas.product import AllowedUnitInput, ProductCreate, ProductRead, ProductUpdate
@@ -194,6 +197,7 @@ async def create_product(
         current_stock_base=payload.initial_stock_base.quantize(Decimal("0.0001")),
         allow_negative_stock=payload.allow_negative_stock,
         enabled_attribute_ids=[str(uid) for uid in payload.enabled_attribute_ids],
+        configured_attributes=payload.configured_attributes,
         custom_attributes=normalized_attrs,
         is_active=payload.is_active,
     )
@@ -221,6 +225,91 @@ async def create_product(
         ip_address=ip_address,
     )
     await db.commit()
+
+
+async def get_product_stock_by_store(
+    db: AsyncSession, product_id: UUID
+) -> list[dict[str, Any]]:
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    product = result.scalar_one_or_none()
+    if not product:
+        raise NotFoundError("Товар не найден")
+
+    stores_res = await db.execute(
+        select(Store).where(Store.is_active.is_(True)).order_by(Store.name.asc())
+    )
+    stores = list(stores_res.scalars().all())
+
+    tx_res = await db.execute(
+        select(InventoryTransaction).where(InventoryTransaction.product_id == product_id)
+    )
+    all_txs = list(tx_res.scalars().all())
+
+    # Group transactions by store_id
+    store_tx_map: dict[UUID | None, list[InventoryTransaction]] = {}
+    for tx in all_txs:
+        store_tx_map.setdefault(tx.store_id, []).append(tx)
+
+    base_label = product.base_unit.plural_name or product.base_unit.name
+    sec_label = (
+        (product.secondary_unit.plural_name or product.secondary_unit.name)
+        if product.secondary_unit
+        else None
+    )
+
+    primary_store = next(
+        (s for s in stores if s.code == "WH-MAIN" or "центр" in s.name.lower()),
+        stores[0] if stores else None,
+    )
+
+    store_nets: dict[UUID, Decimal] = {}
+    for store in stores:
+        txs = store_tx_map.get(store.id, [])
+        net = Decimal("0.0000")
+        for tx in txs:
+            if tx.tx_type == "INBOUND":
+                net += tx.quantity_base_calculated
+            elif tx.tx_type == "OUTBOUND":
+                net -= tx.quantity_base_calculated
+        store_nets[store.id] = net
+
+    breakdown = []
+    for store in stores:
+        txs = store_tx_map.get(store.id, [])
+        if primary_store and store.id == primary_store.id:
+            other_nets = sum(
+                (net for sid, net in store_nets.items() if sid != store.id),
+                Decimal("0.0000"),
+            )
+            stock_base = (product.current_stock_base - other_nets).quantize(Decimal("0.0001"))
+        else:
+            stock_base = max(Decimal("0.0000"), store_nets[store.id]).quantize(Decimal("0.0001"))
+
+        secondary_calc: Decimal | None = None
+        if product.secondary_unit and product.conversion_factor:
+            secondary_calc = (stock_base * product.conversion_factor).quantize(Decimal("0.0001"))
+            stock_display = f"{format_quantity(stock_base)} {base_label} / {format_quantity(secondary_calc)} {sec_label}"
+        else:
+            stock_display = f"{format_quantity(stock_base)} {base_label}"
+
+        last_tx = max((tx.performed_at for tx in txs), default=None) if txs else None
+
+        breakdown.append(
+            {
+                "store_id": str(store.id),
+                "store_name": store.name,
+                "store_code": store.code,
+                "store_address": store.address,
+                "stock_base": float(stock_base),
+                "stock_secondary": float(secondary_calc) if secondary_calc is not None else None,
+                "stock_display": stock_display,
+                "operations_count": len(txs),
+                "last_operation_at": last_tx.isoformat() if last_tx else None,
+            }
+        )
+
+    return breakdown
+
     await db.refresh(product)
     return await get_product_by_id(db, product_id=product.id)
 
@@ -293,6 +382,9 @@ async def update_product(
     if payload.is_active is not None:
         product.is_active = payload.is_active
 
+    if payload.configured_attributes is not None:
+        product.configured_attributes = payload.configured_attributes
+
     enabled_ids = (
         [str(uid) for uid in payload.enabled_attribute_ids]
         if payload.enabled_attribute_ids is not None
@@ -336,7 +428,90 @@ async def update_product(
         ip_address=ip_address,
     )
     await db.commit()
-    return await get_product_by_id(db, product_id=product.id)
+
+
+async def get_product_stock_by_store(
+    db: AsyncSession, product_id: UUID
+) -> list[dict[str, Any]]:
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    product = result.scalar_one_or_none()
+    if not product:
+        raise NotFoundError("Товар не найден")
+
+    stores_res = await db.execute(
+        select(Store).where(Store.is_active.is_(True)).order_by(Store.name.asc())
+    )
+    stores = list(stores_res.scalars().all())
+
+    tx_res = await db.execute(
+        select(InventoryTransaction).where(InventoryTransaction.product_id == product_id)
+    )
+    all_txs = list(tx_res.scalars().all())
+
+    # Group transactions by store_id
+    store_tx_map: dict[UUID | None, list[InventoryTransaction]] = {}
+    for tx in all_txs:
+        store_tx_map.setdefault(tx.store_id, []).append(tx)
+
+    base_label = product.base_unit.plural_name or product.base_unit.name
+    sec_label = (
+        (product.secondary_unit.plural_name or product.secondary_unit.name)
+        if product.secondary_unit
+        else None
+    )
+
+    primary_store = next(
+        (s for s in stores if s.code == "WH-MAIN" or "центр" in s.name.lower()),
+        stores[0] if stores else None,
+    )
+
+    store_nets: dict[UUID, Decimal] = {}
+    for store in stores:
+        txs = store_tx_map.get(store.id, [])
+        net = Decimal("0.0000")
+        for tx in txs:
+            if tx.tx_type == "INBOUND":
+                net += tx.quantity_base_calculated
+            elif tx.tx_type == "OUTBOUND":
+                net -= tx.quantity_base_calculated
+        store_nets[store.id] = net
+
+    breakdown = []
+    for store in stores:
+        txs = store_tx_map.get(store.id, [])
+        if primary_store and store.id == primary_store.id:
+            other_nets = sum(
+                (net for sid, net in store_nets.items() if sid != store.id),
+                Decimal("0.0000"),
+            )
+            stock_base = (product.current_stock_base - other_nets).quantize(Decimal("0.0001"))
+        else:
+            stock_base = max(Decimal("0.0000"), store_nets[store.id]).quantize(Decimal("0.0001"))
+
+        secondary_calc: Decimal | None = None
+        if product.secondary_unit and product.conversion_factor:
+            secondary_calc = (stock_base * product.conversion_factor).quantize(Decimal("0.0001"))
+            stock_display = f"{format_quantity(stock_base)} {base_label} / {format_quantity(secondary_calc)} {sec_label}"
+        else:
+            stock_display = f"{format_quantity(stock_base)} {base_label}"
+
+        last_tx = max((tx.performed_at for tx in txs), default=None) if txs else None
+
+        breakdown.append(
+            {
+                "store_id": str(store.id),
+                "store_name": store.name,
+                "store_code": store.code,
+                "store_address": store.address,
+                "stock_base": float(stock_base),
+                "stock_secondary": float(secondary_calc) if secondary_calc is not None else None,
+                "stock_display": stock_display,
+                "operations_count": len(txs),
+                "last_operation_at": last_tx.isoformat() if last_tx else None,
+            }
+        )
+
+    return breakdown
 
 
 async def delete_product(
@@ -361,3 +536,88 @@ async def delete_product(
         ip_address=ip_address,
     )
     await db.commit()
+
+
+async def get_product_stock_by_store(
+    db: AsyncSession, product_id: UUID
+) -> list[dict[str, Any]]:
+    result = await db.execute(select(Product).where(Product.id == product_id))
+    product = result.scalar_one_or_none()
+    if not product:
+        raise NotFoundError("Товар не найден")
+
+    stores_res = await db.execute(
+        select(Store).where(Store.is_active.is_(True)).order_by(Store.name.asc())
+    )
+    stores = list(stores_res.scalars().all())
+
+    tx_res = await db.execute(
+        select(InventoryTransaction).where(InventoryTransaction.product_id == product_id)
+    )
+    all_txs = list(tx_res.scalars().all())
+
+    # Group transactions by store_id
+    store_tx_map: dict[UUID | None, list[InventoryTransaction]] = {}
+    for tx in all_txs:
+        store_tx_map.setdefault(tx.store_id, []).append(tx)
+
+    base_label = product.base_unit.plural_name or product.base_unit.name
+    sec_label = (
+        (product.secondary_unit.plural_name or product.secondary_unit.name)
+        if product.secondary_unit
+        else None
+    )
+
+    primary_store = next(
+        (s for s in stores if s.code == "WH-MAIN" or "центр" in s.name.lower()),
+        stores[0] if stores else None,
+    )
+
+    store_nets: dict[UUID, Decimal] = {}
+    for store in stores:
+        txs = store_tx_map.get(store.id, [])
+        net = Decimal("0.0000")
+        for tx in txs:
+            if tx.tx_type == "INBOUND":
+                net += tx.quantity_base_calculated
+            elif tx.tx_type == "OUTBOUND":
+                net -= tx.quantity_base_calculated
+        store_nets[store.id] = net
+
+    breakdown = []
+    for store in stores:
+        txs = store_tx_map.get(store.id, [])
+        if primary_store and store.id == primary_store.id:
+            other_nets = sum(
+                (net for sid, net in store_nets.items() if sid != store.id),
+                Decimal("0.0000"),
+            )
+            stock_base = (product.current_stock_base - other_nets).quantize(Decimal("0.0001"))
+        else:
+            stock_base = max(Decimal("0.0000"), store_nets[store.id]).quantize(Decimal("0.0001"))
+
+        secondary_calc: Decimal | None = None
+        if product.secondary_unit and product.conversion_factor:
+            secondary_calc = (stock_base * product.conversion_factor).quantize(Decimal("0.0001"))
+            stock_display = f"{format_quantity(stock_base)} {base_label} / {format_quantity(secondary_calc)} {sec_label}"
+        else:
+            stock_display = f"{format_quantity(stock_base)} {base_label}"
+
+        last_tx = max((tx.performed_at for tx in txs), default=None) if txs else None
+
+        breakdown.append(
+            {
+                "store_id": str(store.id),
+                "store_name": store.name,
+                "store_code": store.code,
+                "store_address": store.address,
+                "stock_base": float(stock_base),
+                "stock_secondary": float(secondary_calc) if secondary_calc is not None else None,
+                "stock_display": stock_display,
+                "operations_count": len(txs),
+                "last_operation_at": last_tx.isoformat() if last_tx else None,
+            }
+        )
+
+    return breakdown
+

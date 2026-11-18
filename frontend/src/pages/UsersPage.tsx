@@ -26,7 +26,7 @@ import {
 import { apiRequest, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDushanbeDateTime, ROLE_LABELS } from "@/lib/utils";
-import type { UserRead, UserRole } from "@/types/api";
+import type { Store, UserRead, UserRole } from "@/types/api";
 
 export function UsersPage() {
   const { user: actor } = useAuth();
@@ -39,12 +39,18 @@ export function UsersPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("OPERATOR");
   const [shiftName, setShiftName] = useState("");
+  const [storeId, setStoreId] = useState<string>("");
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
     queryFn: () => apiRequest<UserRead[]>("/api/v1/users"),
+  });
+
+  const { data: stores = [] } = useQuery({
+    queryKey: ["stores", "list"],
+    queryFn: () => apiRequest<Store[]>("/api/v1/stores"),
   });
 
   const allowedRoles = useMemo<UserRole[]>(() => {
@@ -88,6 +94,7 @@ export function UsersPage() {
     setPassword("");
     setRole("OPERATOR");
     setShiftName("Смена А");
+    setStoreId(stores[0]?.id || "");
     setIsActive(true);
     setError(null);
     setModalOpen(true);
@@ -100,6 +107,7 @@ export function UsersPage() {
     setPassword("");
     setRole(target.role);
     setShiftName(target.shift_name ?? "");
+    setStoreId(target.store_id || stores[0]?.id || "");
     setIsActive(target.is_active);
     setError(null);
     setModalOpen(true);
@@ -130,6 +138,7 @@ export function UsersPage() {
                 <TableHead>Логин</TableHead>
                 <TableHead>ФИО</TableHead>
                 <TableHead>Роль</TableHead>
+                <TableHead>Склад (Store)</TableHead>
                 <TableHead>Смена / Отдел</TableHead>
                 <TableHead>Статус</TableHead>
                 <TableHead>Создан</TableHead>
@@ -149,6 +158,9 @@ export function UsersPage() {
                       <Badge variant={u.role === "SUPER_ADMIN" ? "blue" : "default"}>
                         {ROLE_LABELS[u.role]}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="font-medium text-slate-800">
+                      {u.store?.name ?? "—"}
                     </TableCell>
                     <TableCell>{u.shift_name ?? "—"}</TableCell>
                     <TableCell>
@@ -195,6 +207,7 @@ export function UsersPage() {
                 const payload: Record<string, unknown> = {
                   full_name: fullName.trim(),
                   shift_name: shiftName.trim(),
+                  store_id: storeId || null,
                   is_active: isActive,
                 };
                 if (allowedRoles.includes(role)) payload.role = role;
@@ -207,6 +220,7 @@ export function UsersPage() {
                   password,
                   role,
                   shift_name: shiftName.trim() || null,
+                  store_id: storeId || null,
                 });
               }
             }}
@@ -254,6 +268,22 @@ export function UsersPage() {
                   {allowedRoles.map((r) => (
                     <SelectItem key={r} value={r}>
                       {ROLE_LABELS[r]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Склад (Store) <span className="text-red-500">*</span></Label>
+              <Select value={storeId} onValueChange={setStoreId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Выберите склад привязки сотрудника..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} {s.code ? `(${s.code})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -1,4 +1,9 @@
+import asyncio
+import sys
 from contextlib import asynccontextmanager
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,14 +13,17 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import DomainError
 from app.core.timezone import now_dushanbe
+from app.db.base import Base
 from app.db.seed import seed_database
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, engine
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     if settings.AUTO_SEED:
         async with AsyncSessionLocal() as session:
             await seed_database(session)

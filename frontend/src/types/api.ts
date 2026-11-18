@@ -3,16 +3,40 @@ export type AttributeTargetType = "PRODUCT" | "TX_INBOUND" | "TX_OUTBOUND";
 export type FieldType = "TEXT" | "NUMBER" | "SELECT" | "DATE" | "BOOLEAN";
 export type TransactionType = "INBOUND" | "OUTBOUND" | "ADJUSTMENT";
 
+export interface Store {
+  id: string;
+  name: string;
+  code?: string | null;
+  address?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ConfiguredAttribute {
+  id: string;
+  key: string;
+  label: string;
+  field_type: "TEXT" | "NUMBER" | "DATE" | "SELECT";
+  options?: string[];
+  applies_to: "INBOUND" | "OUTBOUND" | "BOTH" | "PRODUCT";
+  is_required?: boolean;
+  default_value?: unknown;
+}
+
 export interface UserSummary {
   id: string;
   username: string;
   full_name: string;
   role: UserRole;
   shift_name: string | null;
+  store_id?: string | null;
+  store_name?: string | null;
   is_active: boolean;
 }
 
 export interface UserRead extends UserSummary {
+  store_id: string | null;
+  store?: Store | null;
   created_by: string | null;
   created_at: string;
 }
@@ -89,6 +113,7 @@ export interface Product {
   stock_display: string;
   allow_negative_stock: boolean;
   enabled_attribute_ids: string[];
+  configured_attributes?: ConfiguredAttribute[];
   custom_attributes: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
@@ -109,6 +134,7 @@ export interface InventoryTransaction {
   stock_before_base: string;
   stock_after_base: string;
   performed_by_user_id: string;
+  store_id?: string | null;
   counterparty_name: string;
   performed_at: string;
   custom_attributes: Record<string, unknown>;
@@ -131,6 +157,7 @@ export interface InventoryTransaction {
     role: UserRole;
     shift_name: string | null;
   };
+  store?: Store | null;
 }
 
 export interface AuditLog {
@@ -160,3 +187,16 @@ export interface AnalyticsSummary {
   transactions_last_24h: number;
   server_time_dushanbe: string;
 }
+
+export interface StoreStockBreakdown {
+  store_id: string;
+  store_name: string;
+  store_code: string;
+  store_address: string | null;
+  stock_base: number;
+  stock_secondary: number | null;
+  stock_display: string;
+  operations_count: number;
+  last_operation_at: string | null;
+}
+

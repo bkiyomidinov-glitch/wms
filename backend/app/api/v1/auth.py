@@ -40,5 +40,7 @@ async def me(current_user: User = Depends(get_current_user)) -> UserSummary:
         full_name=current_user.full_name,
         role=current_user.role,
         shift_name=current_user.shift_name,
+        store_id=str(current_user.store_id) if current_user.store_id else None,
+        store_name=current_user.store.name if current_user.store else None,
         is_active=current_user.is_active,
     )

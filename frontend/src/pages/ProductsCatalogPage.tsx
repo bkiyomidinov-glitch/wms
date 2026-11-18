@@ -1,17 +1,19 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
-  CheckCircle2,
+  Barcode,
+  Building2,
+  Clock,
   Pencil,
   Plus,
   Search,
   Sparkles,
   Trash2,
+  User as UserIcon,
   Wand2,
   X,
 } from "lucide-react";
-import { DynamicAttributeFields } from "@/components/dynamic/DynamicAttributeFields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SlideOverDrawer } from "@/components/ui/SlideOverDrawer";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -37,40 +38,62 @@ import {
 import { apiRequest, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type {
-  AttributeDefinition,
-  FieldType,
+  ConfiguredAttribute,
   Product,
   UnitOfMeasure,
 } from "@/types/api";
 
+const APPLIES_TO_LABELS: Record<string, string> = {
+  INBOUND: "При приемке",
+  OUTBOUND: "При отправке",
+  BOTH: "Приемка и отправка",
+  PRODUCT: "В карточке товара",
+};
+
+const FIELD_TYPE_LABELS: Record<string, string> = {
+  TEXT: "Текст",
+  NUMBER: "Число",
+  DATE: "Дата",
+  SELECT: "Список",
+  BOOLEAN: "Да / Нет",
+};
+
 export function ProductsCatalogPage() {
-  const { hasRole } = useAuth();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Search & List state
   const [search, setSearch] = useState("");
-
-  // Slide-over Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  // Form fields
+  // Form basic fields
   const [barcode, setBarcode] = useState("");
   const [name, setName] = useState("");
   const [initialStock, setInitialStock] = useState("0");
   const [baseUnitId, setBaseUnitId] = useState<string>("");
   const [isActive, setIsActive] = useState(true);
-  const [customAttrs, setCustomAttrs] = useState<Record<string, unknown>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Inline Constructor sub-form state
-  const [showConstructor, setShowConstructor] = useState(false);
+  // Dynamic time
+  const [currentDateTime, setCurrentDateTime] = useState("");
+
+  // Product configured operational attributes
+  const [configuredAttrs, setConfiguredAttrs] = useState<ConfiguredAttribute[]>([]);
+  const [productCardValues, setProductCardValues] = useState<Record<string, unknown>>({});
+
+  // Sub-form for adding an attribute
+  const [showAddAttrForm, setShowAddAttrForm] = useState(false);
   const [newAttrLabel, setNewAttrLabel] = useState("");
-  const [newAttrType, setNewAttrType] = useState<FieldType>("TEXT");
+  const [newAttrType, setNewAttrType] = useState<"TEXT" | "NUMBER" | "DATE" | "SELECT">("TEXT");
   const [newAttrOptions, setNewAttrOptions] = useState("");
+  const [newAttrAppliesTo, setNewAttrAppliesTo] = useState<"INBOUND" | "OUTBOUND" | "BOTH" | "PRODUCT">("INBOUND");
   const [newAttrRequired, setNewAttrRequired] = useState(false);
-  const [constructorError, setConstructorError] = useState<string | null>(null);
-  const [constructorSuccess, setConstructorSuccess] = useState<string | null>(null);
+  const [attrError, setAttrError] = useState<string | null>(null);
+
+  // Custom unit input state
+  const [showCustomUnitInput, setShowCustomUnitInput] = useState(false);
+  const [customUnitName, setCustomUnitName] = useState("");
+  const [customUnitError, setCustomUnitError] = useState<string | null>(null);
 
   // Queries
   const { data: products = [], isLoading } = useQuery({
@@ -83,58 +106,141 @@ export function ProductsCatalogPage() {
       ),
   });
 
-  const { data: productAttrs = [] } = useQuery({
-    queryKey: ["constructor", "attributes", "PRODUCT"],
-    queryFn: () =>
-      apiRequest<AttributeDefinition[]>(
-        "/api/v1/constructor/attributes?target_type=PRODUCT"
-      ),
-  });
-
   const { data: units = [] } = useQuery({
     queryKey: ["constructor", "units"],
     queryFn: () => apiRequest<UnitOfMeasure[]>("/api/v1/constructor/units"),
   });
 
-  // Drawer Open Handlers
-  const handleOpenCreateDrawer = () => {
+  const handleOpenCreateModal = () => {
     setEditingProduct(null);
     setBarcode("");
     setName("");
     setInitialStock("0");
     setBaseUnitId(units[0]?.id ?? "");
     setIsActive(true);
-    setCustomAttrs({});
+    setConfiguredAttrs([]);
+    setProductCardValues({});
     setFormError(null);
-    setShowConstructor(false);
-    resetConstructorForm();
-    setDrawerOpen(true);
+    setShowAddAttrForm(false);
+    setShowCustomUnitInput(false);
+    setCustomUnitName("");
+    const now = new Date();
+    setCurrentDateTime(
+      now.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    );
+    setModalOpen(true);
   };
 
-  const handleOpenEditDrawer = (product: Product) => {
-    setEditingProduct(product);
-    setBarcode(product.barcode);
-    setName(product.name);
-    setBaseUnitId(product.base_unit_id);
-    setIsActive(product.is_active);
-    setCustomAttrs(product.custom_attributes ?? {});
+  const handleOpenEditModal = (prod: Product) => {
+    setEditingProduct(prod);
+    setBarcode(prod.barcode);
+    setName(prod.name);
+    setBaseUnitId(prod.base_unit_id);
+    setIsActive(prod.is_active);
+    setConfiguredAttrs(prod.configured_attributes || []);
+    setProductCardValues(prod.custom_attributes || {});
     setFormError(null);
-    setShowConstructor(false);
-    resetConstructorForm();
-    setDrawerOpen(true);
+    setShowAddAttrForm(false);
+    setShowCustomUnitInput(false);
+    setCustomUnitName("");
+    const now = new Date();
+    setCurrentDateTime(
+      now.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    );
+    setModalOpen(true);
   };
 
-  const handleCloseDrawer = () => {
-    setDrawerOpen(false);
+  // Add custom unit of measure mutation
+  const createUnitMutation = useMutation({
+    mutationFn: async (unitName: string) => {
+      const code = `u_${Date.now()}`;
+      return apiRequest<UnitOfMeasure>("/api/v1/constructor/units", {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          name: unitName.trim(),
+          plural_name: unitName.trim(),
+          is_active: true,
+        }),
+      });
+    },
+    onSuccess: (newUnit) => {
+      queryClient.invalidateQueries({ queryKey: ["constructor", "units"] });
+      setBaseUnitId(newUnit.id);
+      setShowCustomUnitInput(false);
+      setCustomUnitName("");
+      setCustomUnitError(null);
+    },
+    onError: (err) => {
+      setCustomUnitError(
+        err instanceof ApiError ? err.message : "Ошибка создания единицы"
+      );
+    },
+  });
+
+  const handleSaveCustomUnit = () => {
+    if (!customUnitName.trim()) {
+      setCustomUnitError("Введите название единицы измерения");
+      return;
+    }
+    createUnitMutation.mutate(customUnitName.trim());
   };
 
-  const resetConstructorForm = () => {
+  // Add Attribute to configured list
+  const handleAddAttribute = () => {
+    setAttrError(null);
+    if (!newAttrLabel.trim()) {
+      setAttrError("Укажите название атрибута");
+      return;
+    }
+
+    const key = `attr_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const options =
+      newAttrType === "SELECT"
+        ? newAttrOptions
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [];
+
+    if (newAttrType === "SELECT" && options.length === 0) {
+      setAttrError("Укажите варианты списка через запятую");
+      return;
+    }
+
+    const newAttr: ConfiguredAttribute = {
+      id: key,
+      key,
+      label: newAttrLabel.trim(),
+      field_type: newAttrType,
+      options,
+      applies_to: newAttrAppliesTo,
+      is_required: newAttrRequired,
+    };
+
+    setConfiguredAttrs((prev) => [...prev, newAttr]);
     setNewAttrLabel("");
     setNewAttrType("TEXT");
     setNewAttrOptions("");
+    setNewAttrAppliesTo("INBOUND");
     setNewAttrRequired(false);
-    setConstructorError(null);
-    setConstructorSuccess(null);
+    setShowAddAttrForm(false);
+  };
+
+  const handleRemoveAttribute = (attrId: string) => {
+    setConfiguredAttrs((prev) => prev.filter((a) => a.id !== attrId && a.key !== attrId));
   };
 
   // Product Save Mutation
@@ -153,7 +259,7 @@ export function ProductsCatalogPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      setDrawerOpen(false);
+      setModalOpen(false);
     },
     onError: (err) => {
       setFormError(
@@ -162,7 +268,6 @@ export function ProductsCatalogPage() {
     },
   });
 
-  // Product Delete Mutation
   const deleteMutation = useMutation({
     mutationFn: async (productId: string) => {
       return apiRequest(`/api/v1/products/${productId}`, {
@@ -171,70 +276,6 @@ export function ProductsCatalogPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
-    },
-  });
-
-  // Inline Attribute Create Mutation
-  const createAttrMutation = useMutation({
-    mutationFn: async () => {
-      if (!newAttrLabel.trim()) {
-        throw new Error("Укажите название характеристики / поля");
-      }
-
-      const payload: Record<string, unknown> = {
-        target_type: "PRODUCT",
-        label: newAttrLabel.trim(),
-        field_type: newAttrType,
-        is_required: newAttrRequired,
-        sort_order: productAttrs.length + 1,
-        is_active: true,
-      };
-
-      if (newAttrType === "SELECT") {
-        const opts = newAttrOptions
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        if (opts.length === 0) {
-          throw new Error(
-            "Для выпадающего списка укажите варианты через запятую (например: ПЭТ, Стекло, Тетрапак)"
-          );
-        }
-        payload.options = opts;
-      }
-
-      return apiRequest<AttributeDefinition>("/api/v1/constructor/attributes", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-    },
-    onSuccess: (newAttr) => {
-      queryClient.invalidateQueries({
-        queryKey: ["constructor", "attributes", "PRODUCT"],
-      });
-      setConstructorSuccess(`Поле «${newAttr.label}» создано и доступно для заполнения!`);
-      setTimeout(() => setConstructorSuccess(null), 3500);
-      resetConstructorForm();
-      setShowConstructor(false);
-    },
-    onError: (err) => {
-      setConstructorError(
-        err instanceof Error ? err.message : "Ошибка создания характеристики"
-      );
-    },
-  });
-
-  // Delete Attribute Definition Mutation
-  const deleteAttrMutation = useMutation({
-    mutationFn: async (attrId: string) => {
-      return apiRequest(`/api/v1/constructor/attributes/${attrId}`, {
-        method: "DELETE",
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["constructor", "attributes", "PRODUCT"],
-      });
     },
   });
 
@@ -247,18 +288,23 @@ export function ProductsCatalogPage() {
     e.preventDefault();
     setFormError(null);
 
+    if (!barcode.trim()) {
+      setFormError("Укажите штрихкод товара");
+      return;
+    }
+    if (!name.trim()) {
+      setFormError("Укажите наименование товара");
+      return;
+    }
+
     const payload: Record<string, unknown> = {
       barcode: barcode.trim(),
       name: name.trim(),
-      custom_attributes: customAttrs,
+      base_unit_id: baseUnitId || units[0]?.id,
+      configured_attributes: configuredAttrs,
+      custom_attributes: productCardValues,
       is_active: isActive,
     };
-
-    if (baseUnitId) {
-      payload.base_unit_id = baseUnitId;
-    } else if (units[0]?.id && !editingProduct) {
-      payload.base_unit_id = units[0].id;
-    }
 
     if (!editingProduct) {
       payload.initial_stock_base = Number(initialStock) || 0;
@@ -266,6 +312,11 @@ export function ProductsCatalogPage() {
 
     saveMutation.mutate(payload);
   };
+
+  // Filtered attributes that apply to product card
+  const productCardAttrs = useMemo(() => {
+    return configuredAttrs.filter((a) => a.applies_to === "PRODUCT");
+  }, [configuredAttrs]);
 
   return (
     <div className="space-y-6">
@@ -277,14 +328,14 @@ export function ProductsCatalogPage() {
               Справочник товаров
             </CardTitle>
             <p className="text-xs text-slate-500 mt-1">
-              Карточки номенклатуры, текущие остатки и управление характеристиками
+              Карточки номенклатуры, базовые единицы измерения и настройка атрибутов операций
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-72">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
-                className="h-10 pl-9 border-slate-200 focus-visible:ring-slate-900 focus-visible:border-slate-900"
+                className="h-10 pl-9 border-slate-200 focus-visible:ring-slate-900 focus-visible:border-slate-900 text-sm"
                 placeholder="Поиск по названию или коду..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -292,8 +343,8 @@ export function ProductsCatalogPage() {
             </div>
             <Button
               type="button"
-              className="bg-slate-900 hover:bg-slate-800 text-white shadow-xs font-semibold px-4 cursor-pointer"
-              onClick={handleOpenCreateDrawer}
+              className="bg-[#7F1D1D] hover:bg-[#991B1B] text-white shadow-xs font-semibold px-4 cursor-pointer"
+              onClick={handleOpenCreateModal}
             >
               <Plus className="h-4 w-4" />
               Добавить товар
@@ -308,7 +359,8 @@ export function ProductsCatalogPage() {
                 <TableHead>Штрихкод</TableHead>
                 <TableHead>Наименование</TableHead>
                 <TableHead>Остаток на складе</TableHead>
-                <TableHead>Характеристики</TableHead>
+                <TableHead>Единица учета</TableHead>
+                <TableHead>Настроенные атрибуты</TableHead>
                 <TableHead>Статус</TableHead>
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
@@ -316,26 +368,21 @@ export function ProductsCatalogPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-slate-500">
+                  <TableCell colSpan={7} className="text-center py-10 text-slate-500">
                     Загрузка справочника товаров...
                   </TableCell>
                 </TableRow>
               ) : products.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-slate-500">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <p className="text-sm font-medium text-slate-900">
-                        В справочнике пока нет товаров
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Нажмите кнопку «Добавить товар», чтобы создать первую позицию
-                      </p>
-                    </div>
+                  <TableCell colSpan={7} className="text-center py-12 text-slate-500">
+                    <p className="text-sm font-medium text-slate-900">
+                      В справочнике пока нет товаров
+                    </p>
                   </TableCell>
                 </TableRow>
               ) : (
                 products.map((p) => {
-                  const customAttrEntries = Object.entries(p.custom_attributes ?? {});
+                  const attrs = p.configured_attributes || [];
                   return (
                     <TableRow key={p.id} className="hover:bg-slate-50/70 transition-colors">
                       <TableCell className="font-mono-tabular font-semibold text-slate-900">
@@ -347,20 +394,23 @@ export function ProductsCatalogPage() {
                       <TableCell className="font-mono-tabular font-bold text-slate-900">
                         {p.stock_display}
                       </TableCell>
+                      <TableCell className="text-sm text-slate-600 font-medium">
+                        {p.base_unit?.name || "шт"}
+                      </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-1.5 max-w-sm">
-                          {customAttrEntries.map(([k, v]) => (
+                        <div className="flex flex-wrap gap-1 max-w-xs">
+                          {attrs.map((attr) => (
                             <span
-                              key={k}
+                              key={attr.key || attr.id}
                               className="inline-flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-2 py-0.5 text-xs text-slate-700"
                             >
-                              <span className="font-medium text-slate-500">{k}:</span>
-                              <strong className="text-slate-900">
-                                {typeof v === "boolean" ? (v ? "Да" : "Нет") : String(v)}
-                              </strong>
+                              <span>{attr.label}</span>
+                              <span className="text-[10px] text-slate-400">
+                                ({APPLIES_TO_LABELS[attr.applies_to] || attr.applies_to})
+                              </span>
                             </span>
                           ))}
-                          {customAttrEntries.length === 0 && (
+                          {attrs.length === 0 && (
                             <span className="text-xs text-slate-400">—</span>
                           )}
                         </div>
@@ -376,7 +426,7 @@ export function ProductsCatalogPage() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleOpenEditDrawer(p)}
+                            onClick={() => handleOpenEditModal(p)}
                             title="Редактировать товар"
                             className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                           >
@@ -408,344 +458,496 @@ export function ProductsCatalogPage() {
       </Card>
 
       {/* ======================================================== */}
-      {/* ПРАВАЯ ВЫЕЗЖАЮЩАЯ ПАНЕЛЬ (SLIDE-OVER DRAWER ВО ВСЮ ВЫСОТУ) */}
+      {/* ЦЕНТРАЛЬНОЕ МОДАЛЬНОЕ ОКНО (CENTERED MODAL)              */}
       {/* ======================================================== */}
-      <SlideOverDrawer
-        open={drawerOpen}
-        onClose={handleCloseDrawer}
-        title={editingProduct ? "Карточка товара" : "Новый товар"}
-        subtitle={
-          editingProduct
-            ? `Редактирование: ${editingProduct.name}`
-            : "Заполните реквизиты товара и управляйте характеристиками"
-        }
-        badge={
-          <Badge variant={editingProduct ? "default" : "red"}>
-            {editingProduct ? "Редактирование" : "Создание"}
-          </Badge>
-        }
-        maxWidthClass="max-w-[560px]"
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCloseDrawer}
-              disabled={saveMutation.isPending}
-            >
-              Отмена
-            </Button>
-            <Button
-              type="submit"
-              form="product-drawer-form"
-              className="bg-slate-900 hover:bg-slate-800 text-white font-medium min-w-[140px] shadow-xs cursor-pointer"
-              disabled={saveMutation.isPending}
-            >
-              {saveMutation.isPending ? "Сохранение..." : "Сохранить товар"}
-            </Button>
-          </>
-        }
-      >
-        <form
-          id="product-drawer-form"
-          onSubmit={handleSaveProduct}
-          className="space-y-6"
-        >
-          {formError && (
-            <div className="flex items-start gap-2.5 rounded-lg border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-700">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{formError}</span>
-            </div>
-          )}
-
-          {/* 1. Базовые реквизиты товара */}
-          <div className="space-y-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Основные данные товара
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>
-                Штрихкод товара <span className="text-rose-600">*</span>
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  className="font-mono-tabular"
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="Например: 4870001001"
-                  required
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleGenerateBarcode}
-                  title="Сгенерировать случайный штрихкод"
-                  className="shrink-0 text-xs gap-1.5 font-medium border-slate-200 hover:bg-slate-50"
-                >
-                  <Wand2 className="h-3.5 w-3.5 text-slate-600" />
-                  Код
-                </Button>
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-xl border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in-0 zoom-in-95 duration-150">
+            {/* Шапка окна */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-red-50 text-[#7F1D1D] flex items-center justify-center">
+                  <Barcode className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {editingProduct ? "Редактирование товара" : "Новый товар"}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Укажите реквизиты номенклатуры и настройте атрибуты операций
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>
-                Наименование товара <span className="text-rose-600">*</span>
-              </Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Например: Вода Хаёт 0.5 литров"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {!editingProduct && (
-                <div className="space-y-1.5">
-                  <Label>Начальный остаток</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    min="0"
-                    className="font-mono-tabular"
-                    value={initialStock}
-                    onChange={(e) => setInitialStock(e.target.value)}
-                  />
+            {/* Тело окна */}
+            <form
+              id="product-modal-form"
+              onSubmit={handleSaveProduct}
+              className="p-6 overflow-y-auto space-y-5 flex-1"
+            >
+              {formError && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{formError}</span>
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label>Базовая единица учета</Label>
-                <Select
-                  value={baseUnitId || (units[0]?.id ?? "")}
-                  onValueChange={setBaseUnitId}
-                >
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Выберите единицу..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {units.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.name} ({u.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {editingProduct && (
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/80 p-3.5">
+              {/* 1. Автоматический блок: Кто, Когда, Куда (Склад) */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <div className="text-sm font-medium text-slate-900">
-                    Статус активности товара
+                  <div className="text-slate-400 font-medium flex items-center gap-1">
+                    <UserIcon className="h-3 w-3" />
+                    Кто
                   </div>
-                  <div className="text-xs text-slate-500">
-                    Скрытый товар недоступен для проведения новых операций в терминале
+                  <div className="font-semibold text-slate-900 mt-0.5 truncate">
+                    {user?.full_name || "Администратор"}
                   </div>
                 </div>
-                <Switch checked={isActive} onCheckedChange={setIsActive} />
+                <div>
+                  <div className="text-slate-400 font-medium flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Когда
+                  </div>
+                  <div className="font-semibold text-slate-900 mt-0.5 truncate">
+                    {currentDateTime}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400 font-medium flex items-center gap-1">
+                    <Building2 className="h-3 w-3" />
+                    Склад (Store)
+                  </div>
+                  <div className="font-semibold text-[#7F1D1D] mt-0.5 truncate">
+                    {user?.store_name || "Центральный склад"}
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
 
-          {/* 2. Характеристики товара (Динамические поля) */}
-          <div className="space-y-3 pt-3 border-t border-slate-200">
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Характеристики номенклатуры ({productAttrs.length})
-              </div>
-              <span className="text-[11px] text-slate-400">
-                Динамические поля
-              </span>
-            </div>
+              {/* 2. Основные реквизиты */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">
+                    Штрихкод товара <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      className="font-mono-tabular border-slate-200 focus-visible:ring-[#7F1D1D]"
+                      value={barcode}
+                      onChange={(e) => setBarcode(e.target.value)}
+                      placeholder="Например: 4870001001"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleGenerateBarcode}
+                      title="Сгенерировать случайный штрихкод"
+                      className="shrink-0 text-xs gap-1.5 font-medium border-slate-200 hover:bg-slate-50"
+                    >
+                      <Wand2 className="h-3.5 w-3.5 text-slate-600" />
+                      Код
+                    </Button>
+                  </div>
+                </div>
 
-            {productAttrs.length > 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-4">
-                <DynamicAttributeFields
-                  definitions={productAttrs}
-                  values={customAttrs}
-                  onChange={(k, v) =>
-                    setCustomAttrs((prev) => ({ ...prev, [k]: v }))
-                  }
-                />
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">
+                    Наименование товара <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    className="border-slate-200 focus-visible:ring-[#7F1D1D]"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Например: Вода Хаёт 0.5 литров"
+                    required
+                  />
+                </div>
 
-                {/* Удаление характеристик из системы директором / админом */}
-                {hasRole("DIRECTOR", "SUPER_ADMIN") && (
-                  <div className="pt-3 border-t border-slate-200/80">
-                    <div className="text-[11px] text-slate-500 mb-2 font-medium">
-                      Управление полями номенклатуры (удаление из системы):
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {!editingProduct && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-700">Начальный остаток</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        min="0"
+                        className="font-mono-tabular border-slate-200 focus-visible:ring-[#7F1D1D]"
+                        value={initialStock}
+                        onChange={(e) => setInitialStock(e.target.value)}
+                      />
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {productAttrs.map((attr) => (
-                        <span
-                          key={attr.id}
-                          className="inline-flex items-center gap-1 rounded bg-white border border-slate-200 px-2 py-1 text-xs text-slate-700 shadow-2xs"
+                  )}
+
+                  {/* Единица измерения с опцией «+ Другое (добавить свою)» */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Единица измерения <span className="text-red-500">*</span>
+                      </Label>
+                      {!showCustomUnitInput && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomUnitInput(true)}
+                          className="text-[11px] font-semibold text-[#7F1D1D] hover:underline cursor-pointer"
                         >
-                          <span>{attr.label}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `Удалить характеристику «${attr.label}» из справочника всех товаров?`
-                                )
-                              ) {
-                                deleteAttrMutation.mutate(attr.id);
-                              }
-                            }}
-                            className="text-slate-400 hover:text-rose-600 ml-1 cursor-pointer transition-colors"
-                            title="Удалить это поле"
+                          + Своя единица
+                        </button>
+                      )}
+                    </div>
+
+                    {!showCustomUnitInput ? (
+                      <Select
+                        value={baseUnitId || (units[0]?.id ?? "")}
+                        onValueChange={(val) => {
+                          if (val === "__ADD_NEW_UNIT__") {
+                            setShowCustomUnitInput(true);
+                          } else {
+                            setBaseUnitId(val);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="border-slate-200 focus-visible:ring-[#7F1D1D]">
+                          <SelectValue placeholder="Выберите единицу..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {units.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.name}
+                            </SelectItem>
+                          ))}
+                          <SelectItem
+                            value="__ADD_NEW_UNIT__"
+                            className="text-[#7F1D1D] font-semibold border-t border-slate-100 mt-1"
                           >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
+                            + Другое (добавить свою единицу)...
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="space-y-2 p-2.5 rounded-lg border border-red-200 bg-red-50/50">
+                        {customUnitError && (
+                          <div className="text-[11px] text-red-600">{customUnitError}</div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="Название (рулон, бочка, мешок)..."
+                            value={customUnitName}
+                            onChange={(e) => setCustomUnitName(e.target.value)}
+                            className="bg-white border-slate-200 text-xs h-8"
+                            autoFocus
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleSaveCustomUnit}
+                            disabled={createUnitMutation.isPending}
+                            className="bg-[#7F1D1D] hover:bg-[#991B1B] text-white text-xs h-8 px-3 shrink-0"
+                          >
+                            {createUnitMutation.isPending ? "..." : "Добавить"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setShowCustomUnitInput(false);
+                              setCustomUnitError(null);
+                            }}
+                            className="h-8 px-2 text-slate-500"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {editingProduct && (
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900">
+                        Статус активности товара
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Активный товар доступен для операций в терминале
+                      </div>
+                    </div>
+                    <Switch checked={isActive} onCheckedChange={setIsActive} />
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Атрибуты товара (для приемки/отправки) */}
+              <div className="space-y-3 pt-3 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Атрибуты товара (для приемки/отправки)
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Поля, которые рабочий будет заполнять при проведении операций
+                    </div>
+                  </div>
+                  {!showAddAttrForm && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowAddAttrForm(true);
+                        setAttrError(null);
+                      }}
+                      className="border-[#7F1D1D] text-[#7F1D1D] hover:bg-[#FEF2F2] text-xs h-8 font-medium gap-1 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Добавить атрибут
+                    </Button>
+                  )}
+                </div>
+
+                {/* Sub-form: Add Attribute */}
+                {showAddAttrForm && (
+                  <div className="rounded-xl border border-slate-300 bg-slate-50/90 p-4 space-y-3 animate-in fade-in-0 duration-150">
+                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-[#7F1D1D]" />
+                        Конструктор атрибута товара
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddAttrForm(false)}
+                        className="text-slate-400 hover:text-slate-600 rounded p-1 hover:bg-slate-200"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {attrError && (
+                      <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                        {attrError}
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">
+                        Название атрибута (например: Партия, Линия, Поставщик, Куда/Кому, Срок годности)
+                      </Label>
+                      <Input
+                        value={newAttrLabel}
+                        onChange={(e) => setNewAttrLabel(e.target.value)}
+                        placeholder="Например: Номер партии..."
+                        className="bg-white border-slate-200 text-xs h-9"
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Тип поля</Label>
+                        <Select
+                          value={newAttrType}
+                          onValueChange={(v) => setNewAttrType(v as typeof newAttrType)}
+                        >
+                          <SelectTrigger className="bg-white border-slate-200 text-xs h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="TEXT">Текст (строка)</SelectItem>
+                            <SelectItem value="NUMBER">Число (количество/вес)</SelectItem>
+                            <SelectItem value="DATE">Дата (срок/производство)</SelectItem>
+                            <SelectItem value="SELECT">Выпадающий список</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs">Где заполнять</Label>
+                        <Select
+                          value={newAttrAppliesTo}
+                          onValueChange={(v) => setNewAttrAppliesTo(v as typeof newAttrAppliesTo)}
+                        >
+                          <SelectTrigger className="bg-white border-slate-200 text-xs h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="INBOUND">При приемке</SelectItem>
+                            <SelectItem value="OUTBOUND">При отправке</SelectItem>
+                            <SelectItem value="BOTH">При приемке и отправке</SelectItem>
+                            <SelectItem value="PRODUCT">В карточке товара</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {newAttrType === "SELECT" && (
+                      <div className="space-y-1">
+                        <Label className="text-xs">
+                          Варианты выбора (через запятую)
+                        </Label>
+                        <Input
+                          value={newAttrOptions}
+                          onChange={(e) => setNewAttrOptions(e.target.value)}
+                          placeholder="Например: Смена 1, Смена 2, Смена 3"
+                          className="bg-white border-slate-200 text-xs h-9"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-2">
+                      <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                        <Switch checked={newAttrRequired} onCheckedChange={setNewAttrRequired} />
+                        <span>Обязательное поле для заполнения</span>
+                      </label>
+
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowAddAttrForm(false)}
+                          className="h-8 text-xs text-slate-600"
+                        >
+                          Отмена
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleAddAttribute}
+                          className="bg-[#7F1D1D] hover:bg-[#991B1B] text-white text-xs h-8 px-4"
+                        >
+                          Добавить в товар
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* List of configured attributes */}
+                {configuredAttrs.length > 0 ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 divide-y divide-slate-200/80">
+                    {configuredAttrs.map((attr) => (
+                      <div
+                        key={attr.id || attr.key}
+                        className="p-3 flex items-center justify-between text-xs"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                            <span>{attr.label}</span>
+                            {attr.is_required && (
+                              <span className="text-red-500 font-bold">*</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                            <span className="bg-slate-200/80 px-1.5 py-0.5 rounded text-slate-700">
+                              {FIELD_TYPE_LABELS[attr.field_type] || attr.field_type}
+                            </span>
+                            <span className="bg-red-50 text-[#7F1D1D] px-1.5 py-0.5 rounded border border-red-200 font-medium">
+                              {APPLIES_TO_LABELS[attr.applies_to] || attr.applies_to}
+                            </span>
+                            {attr.options && attr.options.length > 0 && (
+                              <span className="text-slate-400">
+                                ({attr.options.join(", ")})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttribute(attr.id || attr.key)}
+                          className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer"
+                          title="Удалить этот атрибут"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
+                    У товара пока нет настроенных атрибутов для приемки или отправки.
+                    Нажмите «Добавить атрибут», чтобы настроить параметры операций.
+                  </div>
+                )}
+
+                {/* If there are attributes marked for "PRODUCT" (В карточке товара), render their inputs */}
+                {productCardAttrs.length > 0 && (
+                  <div className="space-y-3 pt-3 border-t border-slate-200">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Значения атрибутов карточки товара
+                    </div>
+                    <div className="space-y-2">
+                      {productCardAttrs.map((attr) => (
+                        <div key={attr.key || attr.id} className="space-y-1">
+                          <Label className="text-xs">{attr.label}</Label>
+                          {attr.field_type === "SELECT" ? (
+                            <Select
+                              value={String(productCardValues[attr.key] || "")}
+                              onValueChange={(val) =>
+                                setProductCardValues((prev) => ({ ...prev, [attr.key]: val }))
+                              }
+                            >
+                              <SelectTrigger className="h-9 text-xs border-slate-200">
+                                <SelectValue placeholder="Выберите..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(attr.options || []).map((o) => (
+                                  <SelectItem key={o} value={o}>
+                                    {o}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              type={attr.field_type === "DATE" ? "date" : attr.field_type === "NUMBER" ? "number" : "text"}
+                              value={String(productCardValues[attr.key] || "")}
+                              onChange={(e) =>
+                                setProductCardValues((prev) => ({ ...prev, [attr.key]: e.target.value }))
+                              }
+                              className="h-9 text-xs border-slate-200"
+                            />
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-4 text-center">
-                <p className="text-xs text-slate-500">
-                  У товаров пока нет настроенных характеристик. Вы можете создать любое
-                  поле прямо сейчас.
-                </p>
-              </div>
-            )}
-          </div>
+            </form>
 
-          {/* 3. Встроенный Конструктор новых полей */}
-          <div className="pt-3 border-t border-slate-200">
-            {constructorSuccess && (
-              <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 animate-page-enter">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                <span>{constructorSuccess}</span>
-              </div>
-            )}
-
-            {!showConstructor ? (
+            {/* Футер окна */}
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
               <Button
                 type="button"
                 variant="outline"
-                className="w-full h-11 border-dashed border-slate-300 hover:border-slate-400 text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2 text-sm font-medium transition-colors cursor-pointer"
-                onClick={() => {
-                  resetConstructorForm();
-                  setShowConstructor(true);
-                }}
+                onClick={() => setModalOpen(false)}
+                disabled={saveMutation.isPending}
+                className="border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
               >
-                <Plus className="h-4 w-4 text-slate-500" />
-                + Добавить своё поле / выпадающий список для товара
+                Отмена
               </Button>
-            ) : (
-              <div className="rounded-xl border border-slate-300 bg-slate-50/80 p-4 space-y-4 animate-page-enter">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                    <Sparkles className="h-4 w-4 text-slate-700" />
-                    Конструктор нового поля товара
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowConstructor(false)}
-                    className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {constructorError && (
-                  <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-white p-2.5 text-xs text-rose-700">
-                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>{constructorError}</span>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Название поля (на русском)</Label>
-                  <Input
-                    className="h-10 text-sm bg-white border-slate-200"
-                    value={newAttrLabel}
-                    onChange={(e) => setNewAttrLabel(e.target.value)}
-                    placeholder="Например: Цвет, Тара, Срок годности, Категория..."
-                    autoFocus
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Тип значения</Label>
-                  <Select
-                    value={newAttrType}
-                    onValueChange={(v) => setNewAttrType(v as FieldType)}
-                  >
-                    <SelectTrigger className="h-10 text-sm bg-white border-slate-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TEXT">Текст (строка)</SelectItem>
-                      <SelectItem value="NUMBER">Число (вес / объем / штуки)</SelectItem>
-                      <SelectItem value="SELECT">Выпадающий список с вариантами</SelectItem>
-                      <SelectItem value="DATE">Дата (срок годности / дата пр-ва)</SelectItem>
-                      <SelectItem value="BOOLEAN">Да / Нет (переключатель)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {newAttrType === "SELECT" && (
-                  <div className="space-y-1.5 animate-page-enter">
-                    <Label className="text-xs">
-                      Варианты списка (через запятую)
-                    </Label>
-                    <Input
-                      className="h-10 text-sm bg-white border-slate-200"
-                      value={newAttrOptions}
-                      onChange={(e) => setNewAttrOptions(e.target.value)}
-                      placeholder="Например: ПЭТ, Стекло, Тетрапак или шт, литр, упаковка"
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      Разделяйте варианты запятыми — система сама создаст список
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between pt-1">
-                  <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                    <Switch
-                      checked={newAttrRequired}
-                      onCheckedChange={setNewAttrRequired}
-                    />
-                    <span>Обязательное поле для заполнения</span>
-                  </label>
-
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowConstructor(false)}
-                      className="h-8 text-xs text-slate-600"
-                    >
-                      Отмена
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 px-4 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-white"
-                      disabled={createAttrMutation.isPending || !newAttrLabel.trim()}
-                      onClick={() => createAttrMutation.mutate()}
-                    >
-                      {createAttrMutation.isPending ? "Создание..." : "Создать поле"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
+              <Button
+                type="submit"
+                form="product-modal-form"
+                disabled={saveMutation.isPending}
+                className="bg-[#7F1D1D] hover:bg-[#991B1B] text-white font-semibold px-6 cursor-pointer shadow-sm"
+              >
+                {saveMutation.isPending ? "Сохранение..." : "Сохранить товар"}
+              </Button>
+            </div>
           </div>
-        </form>
-      </SlideOverDrawer>
+        </div>
+      )}
     </div>
   );
 }

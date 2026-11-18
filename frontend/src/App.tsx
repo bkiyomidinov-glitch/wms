@@ -2,11 +2,10 @@ import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell, type AppRoute } from "@/components/layout/AppShell";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { DirectoryPage } from "@/pages/DirectoryPage";
 import { JournalPage } from "@/pages/JournalPage";
 import { LoginPage } from "@/pages/LoginPage";
-import { ProductsCatalogPage } from "@/pages/ProductsCatalogPage";
 import { TerminalPage } from "@/pages/TerminalPage";
-import { UsersPage } from "@/pages/UsersPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,14 +40,20 @@ function CoreWorkspace() {
   }
 
   const renderPage = () => {
-    if (route === "history" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
-      return <JournalPage />;
+    if (route === "directory" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
+      return <DirectoryPage />;
     }
     if (route === "products" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
-      return <ProductsCatalogPage />;
+      return <DirectoryPage initialTab="products" />;
+    }
+    if (route === "stores" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
+      return <DirectoryPage initialTab="stores" />;
     }
     if (route === "users" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
-      return <UsersPage />;
+      return <DirectoryPage initialTab="users" />;
+    }
+    if (route === "history" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
+      return <JournalPage />;
     }
     return <TerminalPage onNavigate={setRoute} />;
   };

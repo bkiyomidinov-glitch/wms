@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ScanBarcode,
   Search,
-  Sparkles,
   X,
 } from "lucide-react";
 import { OperationModalForm } from "@/components/operations/OperationModalForm";
@@ -69,17 +68,6 @@ export function TerminalPage({}: TerminalPageProps = {}) {
     [dictionaries]
   );
 
-  // Auto-load initial product if none active yet and products exist
-  useEffect(() => {
-    if (!activeProduct && allProducts.length > 0) {
-      const defaultProd = allProducts.find((p) => p.barcode === "4870001001") ?? allProducts[0];
-      if (defaultProd) {
-        setActiveProduct(defaultProd);
-        setBarcodeInput(defaultProd.barcode);
-      }
-    }
-  }, [allProducts, activeProduct]);
-
   // Sync activeProduct with refreshed list after transactions
   useEffect(() => {
     if (!activeProduct) return;
@@ -136,7 +124,14 @@ export function TerminalPage({}: TerminalPageProps = {}) {
             ref={barcodeInputRef}
             type="text"
             value={barcodeInput}
-            onChange={(e) => setBarcodeInput(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setBarcodeInput(val);
+              if (!val.trim()) {
+                setActiveProduct(null);
+                setScanError(null);
+              }
+            }}
             placeholder="Сканируйте штрихкод или введите код товара..."
             className="flex-1 h-10 px-3 text-base font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none border-none bg-transparent"
           />
@@ -146,6 +141,7 @@ export function TerminalPage({}: TerminalPageProps = {}) {
               type="button"
               onClick={() => {
                 setBarcodeInput("");
+                setActiveProduct(null);
                 setScanError(null);
                 barcodeInputRef.current?.focus();
               }}
@@ -165,19 +161,6 @@ export function TerminalPage({}: TerminalPageProps = {}) {
             {scanLoading ? "Поиск..." : "Найти"}
           </Button>
         </form>
-
-        {/* Быстрые подсказки */}
-        <div className="mt-2.5 flex items-center gap-2 px-1 text-xs text-slate-500">
-          <span>Быстрый выбор:</span>
-          <button
-            type="button"
-            onClick={() => handleScanLookup("4870001001")}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs text-slate-700 hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition-colors"
-          >
-            <Sparkles className="h-3 w-3 text-slate-400" />
-            4870001001 (Вода Хаёт 0.5л)
-          </button>
-        </div>
 
         {scanError && (
           <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">

@@ -25,6 +25,8 @@ def _build_token_response(user: User) -> TokenResponse:
             full_name=user.full_name,
             role=user.role,
             shift_name=user.shift_name,
+            store_id=str(user.store_id) if user.store_id else None,
+            store_name=user.store.name if user.store else None,
             is_active=user.is_active,
         ),
     )

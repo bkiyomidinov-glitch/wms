@@ -18,6 +18,7 @@ router = APIRouter(prefix="/transactions", tags=["Inventory Operations"])
 async def list_transactions(
     tx_type: TransactionType | None = Query(default=None),
     product_id: UUID | None = Query(default=None),
+    store_id: UUID | None = Query(default=None),
     search: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -29,6 +30,7 @@ async def list_transactions(
         actor=current_user,
         tx_type=tx_type,
         product_id=product_id,
+        store_id=store_id,
         search=search,
         limit=limit,
         offset=offset,

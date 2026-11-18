@@ -16,6 +16,8 @@ class UserSummary(BaseModel):
     full_name: str
     role: str
     shift_name: str | None = None
+    store_id: str | None = None
+    store_name: str | None = None
     is_active: bool
 
 

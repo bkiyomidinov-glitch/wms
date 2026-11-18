@@ -6,8 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.domain.enums import UserRole
 from app.models.product import Product, ProductAllowedUnit
+from app.models.store import Store
 from app.models.unit import UnitOfMeasure
 from app.models.user import User
+
+
+STANDARD_STORES = [
+    {"name": "Центральный склад", "code": "WH-MAIN", "address": "г. Душанбе, ул. Айни 48"},
+    {"name": "Склад готовой продукции", "code": "WH-PROD", "address": "г. Душанбе, Промзона 12"},
+    {"name": "Склад сырья", "code": "WH-RAW", "address": "г. Душанбе, Промзона 14"},
+]
 
 
 STANDARD_UNITS = [
@@ -44,21 +52,56 @@ async def ensure_standard_units(db: AsyncSession) -> dict[str, UnitOfMeasure]:
     return unit_map
 
 
+async def ensure_standard_stores(db: AsyncSession) -> dict[str, Store]:
+    """Ensure standard warehouses exist in the database."""
+    store_map: dict[str, Store] = {}
+    for item in STANDARD_STORES:
+        res = await db.execute(select(Store).where(Store.name == item["name"]))
+        store = res.scalar_one_or_none()
+        if not store:
+            store = Store(
+                name=item["name"],
+                code=item["code"],
+                address=item["address"],
+                is_active=True,
+            )
+            db.add(store)
+            await db.flush()
+        store_map[item["code"]] = store
+    return store_map
+
+
 async def seed_database(db: AsyncSession) -> None:
-    """Idempotently seed corporate users, core units of measure, and clean product example."""
+    """Idempotently seed corporate users, core units of measure, stores, and clean product example."""
     unit_map = await ensure_standard_units(db)
+    store_map = await ensure_standard_stores(db)
+
+    main_store = store_map["WH-MAIN"]
+    prod_store = store_map["WH-PROD"]
 
     existing_admin = await db.execute(select(User).where(User.username == "admin"))
-    if existing_admin.scalar_one_or_none():
+    admin_user = existing_admin.scalar_one_or_none()
+
+    if admin_user:
+        # Link any existing users without stores
+        all_users = (await db.execute(select(User))).scalars().all()
+        for u in all_users:
+            if u.store_id is None:
+                if u.role == UserRole.MANAGER.value:
+                    u.store_id = prod_store.id
+                else:
+                    u.store_id = main_store.id
+        await db.commit()
         return
 
-    # 1. Corporate Users (RBAC)
+    # 1. Corporate Users (RBAC) with Store binding
     admin = User(
         username="admin",
         full_name="Тимур Рахимов",
         password_hash=hash_password("Admin123!"),
         role=UserRole.SUPER_ADMIN.value,
         shift_name="IT-отдел",
+        store_id=main_store.id,
         is_active=True,
     )
     db.add(admin)
@@ -70,6 +113,7 @@ async def seed_database(db: AsyncSession) -> None:
         password_hash=hash_password("Director123!"),
         role=UserRole.DIRECTOR.value,
         shift_name="Руководство",
+        store_id=main_store.id,
         is_active=True,
         created_by=admin.id,
     )
@@ -79,6 +123,7 @@ async def seed_database(db: AsyncSession) -> None:
         password_hash=hash_password("Manager123!"),
         role=UserRole.MANAGER.value,
         shift_name="Смена А",
+        store_id=prod_store.id,
         is_active=True,
         created_by=admin.id,
     )
@@ -88,6 +133,7 @@ async def seed_database(db: AsyncSession) -> None:
         password_hash=hash_password("Operator123!"),
         role=UserRole.OPERATOR.value,
         shift_name="Смена А",
+        store_id=main_store.id,
         is_active=True,
         created_by=manager.id,
     )
@@ -99,8 +145,43 @@ async def seed_database(db: AsyncSession) -> None:
     unit_l = unit_map["l"]
     unit_pack12 = unit_map["pack12"]
 
-    # 3. Exactly ONE clean product example as requested by executive order:
-    # "Вода Хаёт 0.5 литров", 4870001001, stock 110 шт / 55 л
+    # 3. Clean product example with preconfigured attributes
+    sample_attrs = [
+        {
+            "id": "attr-batch",
+            "key": "batch_number",
+            "label": "Номер партии",
+            "field_type": "TEXT",
+            "applies_to": "BOTH",
+            "is_required": False,
+        },
+        {
+            "id": "attr-shift",
+            "key": "shift",
+            "label": "Рабочая смена",
+            "field_type": "SELECT",
+            "options": ["Смена 1 (Утро)", "Смена 2 (Вечер)", "Смена 3 (Ночь)"],
+            "applies_to": "INBOUND",
+            "is_required": False,
+        },
+        {
+            "id": "attr-expiry",
+            "key": "expiry_date",
+            "label": "Срок годности",
+            "field_type": "DATE",
+            "applies_to": "INBOUND",
+            "is_required": False,
+        },
+        {
+            "id": "attr-vehicle",
+            "key": "vehicle_number",
+            "label": "Номер машины / ТС",
+            "field_type": "TEXT",
+            "applies_to": "BOTH",
+            "is_required": False,
+        },
+    ]
+
     water_hayot = Product(
         barcode="4870001001",
         name="Вода Хаёт 0.5 литров",
@@ -112,6 +193,7 @@ async def seed_database(db: AsyncSession) -> None:
         current_stock_base=Decimal("110.0000"),
         allow_negative_stock=False,
         enabled_attribute_ids=[],
+        configured_attributes=sample_attrs,
         custom_attributes={},
     )
     db.add(water_hayot)

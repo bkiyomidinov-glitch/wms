@@ -139,6 +139,13 @@ async def execute_transaction(
 
     product.current_stock_base = stock_after
 
+    effective_store_id = payload.store_id or actor.store_id
+    effective_counterparty = (
+        payload.counterparty_name.strip()
+        if payload.counterparty_name and payload.counterparty_name.strip()
+        else (actor.store.name if actor.store else "Основной склад")
+    )
+
     tx = InventoryTransaction(
         tx_type=payload.tx_type.value,
         product_id=product.id,
@@ -148,7 +155,8 @@ async def execute_transaction(
         stock_before_base=stock_before,
         stock_after_base=stock_after,
         performed_by_user_id=actor.id,
-        counterparty_name=payload.counterparty_name.strip(),
+        store_id=effective_store_id,
+        counterparty_name=effective_counterparty,
         performed_at=performed_at,
         custom_attributes=normalized_attrs,
         notes=payload.notes.strip() if payload.notes else None,
@@ -190,6 +198,7 @@ async def list_transactions(
     actor: User,
     tx_type: TransactionType | None = None,
     product_id: UUID | None = None,
+    store_id: UUID | None = None,
     search: str | None = None,
     limit: int = 100,
     offset: int = 0,
@@ -210,6 +219,8 @@ async def list_transactions(
         stmt = stmt.where(InventoryTransaction.tx_type == tx_type.value)
     if product_id is not None:
         stmt = stmt.where(InventoryTransaction.product_id == product_id)
+    if store_id is not None:
+        stmt = stmt.where(InventoryTransaction.store_id == store_id)
     if search and search.strip():
         q = f"%{search.strip()}%"
         stmt = stmt.where(

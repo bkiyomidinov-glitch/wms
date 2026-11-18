@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -164,3 +165,13 @@ async def add_unit_to_product(
         unit=UnitRead.model_validate(unit),
         multiplier_to_base=mult,
     )
+
+
+@router.get("/{product_id}/stores-stock", response_model=list[dict[str, Any]])
+async def get_product_stores_stock(
+    product_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    return await product_service.get_product_stock_by_store(db, product_id)
+
