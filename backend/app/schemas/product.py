@@ -43,6 +43,13 @@ class ProductCreate(BaseModel):
     def strip_text(cls, v: str) -> str:
         return v.strip()
 
+    @field_validator("initial_stock_base")
+    @classmethod
+    def validate_integer_initial_stock(cls, v: Decimal) -> Decimal:
+        if v < 0 or v != int(v):
+            raise ValueError("Начальный остаток должен быть целым неотрицательным числом")
+        return Decimal(int(v))
+
 
 class ProductUpdate(BaseModel):
     barcode: str | None = Field(default=None, min_length=1, max_length=128)

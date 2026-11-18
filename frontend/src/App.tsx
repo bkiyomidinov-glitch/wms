@@ -6,6 +6,7 @@ import { DirectoryPage } from "@/pages/DirectoryPage";
 import { JournalPage } from "@/pages/JournalPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { TerminalPage } from "@/pages/TerminalPage";
+import { WarehousesOverviewPage } from "@/pages/WarehousesOverviewPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +41,9 @@ function CoreWorkspace() {
   }
 
   const renderPage = () => {
+    if (route === "warehouses") {
+      return <WarehousesOverviewPage />;
+    }
     if (route === "directory" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
       return <DirectoryPage />;
     }
@@ -52,7 +56,7 @@ function CoreWorkspace() {
     if (route === "users" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
       return <DirectoryPage initialTab="users" />;
     }
-    if (route === "history" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
+    if (route === "history") {
       return <JournalPage />;
     }
     return <TerminalPage onNavigate={setRoute} />;

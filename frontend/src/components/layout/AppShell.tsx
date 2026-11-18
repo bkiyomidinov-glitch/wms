@@ -13,6 +13,7 @@ import type { UserRole } from "@/types/api";
 
 export type AppRoute =
   | "terminal"
+  | "warehouses"
   | "directory"
   | "history"
   | "products"
@@ -34,6 +35,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["OPERATOR", "MANAGER", "DIRECTOR", "SUPER_ADMIN"],
   },
   {
+    id: "warehouses",
+    label: "СКЛАДЫ",
+    icon: Warehouse,
+    roles: ["OPERATOR", "MANAGER", "DIRECTOR", "SUPER_ADMIN"],
+  },
+  {
     id: "directory",
     label: "СПРАВОЧНИК",
     icon: Layers,
@@ -43,7 +50,7 @@ const NAV_ITEMS: NavItem[] = [
     id: "history",
     label: "ИСТОРИЯ",
     icon: ClipboardList,
-    roles: ["MANAGER", "DIRECTOR", "SUPER_ADMIN"],
+    roles: ["OPERATOR", "MANAGER", "DIRECTOR", "SUPER_ADMIN"],
   },
 ];
 

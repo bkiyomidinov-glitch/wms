@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -21,6 +22,15 @@ async def list_stores(
 ) -> list[StoreRead]:
     stores = await store_service.list_stores(db, include_inactive=include_inactive)
     return [StoreRead.model_validate(s) for s in stores]
+
+
+@router.get("/movements", response_model=list[dict[str, Any]], summary="List store stock & movements table")
+async def list_store_movements(
+    limit: int = Query(default=500, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    return await store_service.list_store_movements(db, limit=limit)
 
 
 @router.get("/{store_id}", response_model=StoreRead, summary="Get store by ID")

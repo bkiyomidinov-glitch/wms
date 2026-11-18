@@ -200,3 +200,24 @@ export interface StoreStockBreakdown {
   last_operation_at: string | null;
 }
 
+export interface StoreMovementRow {
+  id: string;
+  store_id: string | null;
+  store_name: string;
+  store_code: string | null;
+  product_id: string;
+  barcode: string;
+  product_name: string;
+  tx_type: "INBOUND" | "OUTBOUND" | "ADJUSTMENT" | "INITIAL_STOCK";
+  counterparty_name: string;
+  quantity_entered: number;
+  unit_name: string;
+  current_store_stock: number;
+  base_unit_name: string;
+  performed_at: string;
+  performed_by_name: string;
+  performed_by_role: UserRole;
+  custom_attributes: Record<string, unknown>;
+  notes: string | null;
+}
+

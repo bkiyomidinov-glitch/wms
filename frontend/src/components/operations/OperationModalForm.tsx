@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { apiRequest, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatQty } from "@/lib/utils";
+import { blockNonIntegerKeys, formatInt, sanitizeIntegerInput } from "@/lib/utils";
 import type {
   AttributeDefinition,
   CustomDictionary,
@@ -99,13 +100,13 @@ export function OperationModalForm({
     });
   }, [product, txType]);
 
-  // Stock calculation preview
+  // Stock calculation preview (strictly integers)
   const calculatedStockAfter = useMemo(() => {
-    const entered = parseFloat(quantity);
+    const entered = parseInt(quantity, 10);
     if (isNaN(entered) || entered <= 0) return null;
-    const current = parseFloat(product.current_stock_base) || 0;
+    const current = Math.round(Number(product.current_stock_base) || 0);
     const next = txType === "INBOUND" ? current + entered : current - entered;
-    return formatQty(next);
+    return formatInt(next);
   }, [quantity, product.current_stock_base, txType]);
 
   const mutation = useMutation({
@@ -118,6 +119,8 @@ export function OperationModalForm({
     onSuccess: (tx) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["store-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["my-history"] });
       onSuccess(tx);
       onOpenChange(false);
     },
@@ -132,9 +135,9 @@ export function OperationModalForm({
     e.preventDefault();
     setFormError(null);
 
-    const qty = parseFloat(quantity);
-    if (isNaN(qty) || qty <= 0) {
-      setFormError("Укажите корректное количество больше 0");
+    const qty = parseInt(quantity, 10);
+    if (isNaN(qty) || qty < 1 || String(qty) !== quantity.trim()) {
+      setFormError("Укажите целое положительное число (минимум 1)");
       return;
     }
 
@@ -163,7 +166,7 @@ export function OperationModalForm({
 
   const isIncoming = txType === "INBOUND";
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-lg rounded-xl border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in-0 zoom-in-95 duration-150">
         {/* 1. Заголовок окна: «Принять товар» или «Отправить товар» + Название товара и штрихкод */}
@@ -253,7 +256,7 @@ export function OperationModalForm({
               <span className="text-xs text-slate-500">
                 Текущий остаток:{" "}
                 <strong className="text-slate-900">
-                  {formatQty(product.current_stock_base)} {unitLabel}
+                  {formatInt(product.current_stock_base)} {unitLabel}
                 </strong>
               </span>
             </div>
@@ -261,11 +264,14 @@ export function OperationModalForm({
               <Input
                 id="qty-input"
                 type="number"
-                step="any"
-                min="0.0001"
+                step="1"
+                min="1"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 autoFocus
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onKeyDown={blockNonIntegerKeys}
+                onChange={(e) => setQuantity(sanitizeIntegerInput(e.target.value))}
                 className="text-lg font-bold font-mono h-12 pr-16 border-slate-200 focus-visible:ring-[#7F1D1D]"
                 required
               />
@@ -384,6 +390,7 @@ export function OperationModalForm({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

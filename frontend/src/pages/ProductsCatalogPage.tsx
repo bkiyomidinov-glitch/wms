@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/table";
 import { apiRequest, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { blockNonIntegerKeys, sanitizeIntegerInput } from "@/lib/utils";
 import type {
   ConfiguredAttribute,
   Product,
@@ -307,7 +309,7 @@ export function ProductsCatalogPage() {
     };
 
     if (!editingProduct) {
-      payload.initial_stock_base = Number(initialStock) || 0;
+      payload.initial_stock_base = Math.max(0, parseInt(initialStock, 10) || 0);
     }
 
     saveMutation.mutate(payload);
@@ -460,8 +462,9 @@ export function ProductsCatalogPage() {
       {/* ======================================================== */}
       {/* ЦЕНТРАЛЬНОЕ МОДАЛЬНОЕ ОКНО (CENTERED MODAL)              */}
       {/* ======================================================== */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-4">
+      {modalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-xl border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in-0 zoom-in-95 duration-150">
             {/* Шапка окна */}
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
@@ -577,11 +580,14 @@ export function ProductsCatalogPage() {
                       <Label className="text-xs font-semibold text-slate-700">Начальный остаток</Label>
                       <Input
                         type="number"
-                        step="any"
+                        step="1"
                         min="0"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         className="font-mono-tabular border-slate-200 focus-visible:ring-[#7F1D1D]"
                         value={initialStock}
-                        onChange={(e) => setInitialStock(e.target.value)}
+                        onKeyDown={blockNonIntegerKeys}
+                        onChange={(e) => setInitialStock(sanitizeIntegerInput(e.target.value))}
                       />
                     </div>
                   )}
@@ -946,8 +952,9 @@ export function ProductsCatalogPage() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </div>
   );
 }

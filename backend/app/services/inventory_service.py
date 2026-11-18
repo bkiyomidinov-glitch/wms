@@ -19,6 +19,7 @@ from app.domain.permissions import (
     can_view_all_transactions,
 )
 from app.models.product import Product, ProductAllowedUnit
+from app.models.store import Store
 from app.models.transaction import InventoryTransaction
 from app.models.unit import UnitOfMeasure
 from app.models.user import User
@@ -89,10 +90,12 @@ async def execute_transaction(
             else:
                 multiplier = allowed_unit.multiplier_to_base
 
-    qty_entered = payload.quantity_entered.quantize(Decimal("0.0001"))
-    qty_base = (qty_entered * multiplier).quantize(Decimal("0.0001"))
+    qty_entered = Decimal(int(payload.quantity_entered))
+    qty_base = Decimal(int(round(qty_entered * multiplier)))
+    if qty_base < Decimal("1"):
+        qty_base = Decimal("1")
 
-    stock_before = product.current_stock_base
+    stock_before = Decimal(int(round(product.current_stock_base)))
     is_decrease = payload.tx_type == TransactionType.OUTBOUND or (
         payload.tx_type == TransactionType.ADJUSTMENT
         and payload.adjustment_direction == "DECREASE"
@@ -107,8 +110,8 @@ async def execute_transaction(
                 f"доступно {format_quantity(stock_before)} {base_name}, "
                 f"запрошено {format_quantity(qty_base)} {base_name}",
                 details={
-                    "available_base": str(stock_before),
-                    "requested_base": str(qty_base),
+                    "available_base": str(int(stock_before)),
+                    "requested_base": str(int(qty_base)),
                 },
             )
     else:
@@ -140,10 +143,28 @@ async def execute_transaction(
     product.current_stock_base = stock_after
 
     effective_store_id = payload.store_id or actor.store_id
+    effective_store_name: str | None = None
+    if effective_store_id:
+        st_res = await db.execute(select(Store).where(Store.id == effective_store_id))
+        st_obj = st_res.scalar_one_or_none()
+        if st_obj:
+            effective_store_name = st_obj.name
+    elif actor.store:
+        effective_store_name = actor.store.name
+
+    unit_name = product.base_unit.name
+    if payload.unit_id != product.base_unit_id:
+        u_res2 = await db.execute(
+            select(UnitOfMeasure).where(UnitOfMeasure.id == payload.unit_id)
+        )
+        u_obj2 = u_res2.scalar_one_or_none()
+        if u_obj2:
+            unit_name = u_obj2.name
+
     effective_counterparty = (
         payload.counterparty_name.strip()
         if payload.counterparty_name and payload.counterparty_name.strip()
-        else (actor.store.name if actor.store else "Основной склад")
+        else (effective_store_name or "Основной склад")
     )
 
     tx = InventoryTransaction(
@@ -170,14 +191,21 @@ async def execute_transaction(
         action=f"TRANSACTION_{payload.tx_type.value}",
         entity="inventory_transaction",
         entity_id=tx.id,
-        old_value={"stock_base": str(stock_before)},
-        new_value={"stock_base": str(stock_after)},
+        old_value={"stock_base": int(stock_before)},
+        new_value={"stock_base": int(stock_after)},
         payload={
             "product_id": str(product.id),
+            "product_name": product.name,
             "barcode": product.barcode,
-            "quantity_entered": str(qty_entered),
-            "quantity_base": str(qty_base),
+            "quantity_entered": int(qty_entered),
+            "unit_name": unit_name,
+            "quantity_base": int(qty_base),
+            "base_unit_name": product.base_unit.name,
+            "store_id": str(effective_store_id) if effective_store_id else None,
+            "store_name": effective_store_name or effective_counterparty,
             "counterparty": tx.counterparty_name,
+            "custom_attributes": normalized_attrs,
+            "notes": tx.notes,
             "performed_at": performed_at.isoformat(),
         },
         ip_address=ip_address,

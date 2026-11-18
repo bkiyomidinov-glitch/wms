@@ -32,6 +32,20 @@ async def refresh(
     return await auth_service.refresh_user_tokens(db, refresh_token=payload.refresh_token)
 
 
+@router.post("/logout")
+async def logout(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    await auth_service.record_logout(
+        db,
+        user=current_user,
+        ip_address=get_client_ip(request),
+    )
+    return {"status": "ok"}
+
+
 @router.get("/me", response_model=UserSummary)
 async def me(current_user: User = Depends(get_current_user)) -> UserSummary:
     return UserSummary(

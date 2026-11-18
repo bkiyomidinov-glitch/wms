@@ -22,6 +22,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const logout = useCallback(() => {
+    const { accessToken } = getStoredTokens();
+    if (accessToken) {
+      fetch("/api/v1/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        keepalive: true,
+      }).catch(() => {});
+    }
     clearStoredTokens();
     setUser(null);
   }, []);

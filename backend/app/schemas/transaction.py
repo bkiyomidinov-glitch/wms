@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.enums import TransactionType
 from app.schemas.store import StoreRead
@@ -13,7 +13,7 @@ from app.schemas.unit import UnitRead
 class TransactionCreate(BaseModel):
     tx_type: TransactionType
     product_id: UUID
-    quantity_entered: Decimal = Field(..., gt=Decimal("0"))
+    quantity_entered: Decimal = Field(..., ge=Decimal("1"))
     unit_id: UUID
     store_id: UUID | None = None
     counterparty_name: str | None = Field(default=None, max_length=200)
@@ -26,6 +26,13 @@ class TransactionCreate(BaseModel):
     unit_multiplier_to_base: Decimal | None = Field(
         default=None, description="Optional multiplier to product base unit"
     )
+
+    @field_validator("quantity_entered")
+    @classmethod
+    def validate_integer_quantity(cls, v: Decimal) -> Decimal:
+        if v <= 0 or v != int(v):
+            raise ValueError("Количество должно быть целым положительным числом (без дробей)")
+        return Decimal(int(v))
 
     @model_validator(mode="after")
     def validate_adjustment_fields(self) -> "TransactionCreate":

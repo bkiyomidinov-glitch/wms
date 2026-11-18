@@ -21,8 +21,10 @@ import type {
   TransactionType,
 } from "@/types/api";
 
+import type { AppRoute } from "@/components/layout/AppShell";
+
 interface TerminalPageProps {
-  onNavigate?: (route: "terminal" | "products" | "history" | "users") => void;
+  onNavigate?: (route: AppRoute) => void;
 }
 
 export function TerminalPage({}: TerminalPageProps = {}) {

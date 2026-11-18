@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.domain.enums import UserRole
 from app.models.audit_log import AuditLog
@@ -10,6 +10,24 @@ from app.models.user import User
 from app.schemas.audit import AuditLogRead
 
 router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"])
+
+
+@router.get("/my", response_model=list[AuditLogRead])
+async def list_my_audit_logs(
+    limit: int = Query(default=150, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AuditLog]:
+    stmt = (
+        select(AuditLog)
+        .where(AuditLog.user_id == current_user.id)
+        .order_by(AuditLog.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
 @router.get("", response_model=list[AuditLogRead])

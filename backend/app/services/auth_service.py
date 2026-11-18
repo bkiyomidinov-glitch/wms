@@ -55,11 +55,39 @@ async def authenticate_user(
         action="USER_LOGIN",
         entity="user",
         entity_id=user.id,
-        payload={"username": user.username, "role": user.role},
+        payload={
+            "username": user.username,
+            "full_name": user.full_name,
+            "role": user.role,
+            "store_name": user.store.name if user.store else None,
+        },
         ip_address=ip_address,
     )
     await db.commit()
     return _build_token_response(user)
+
+
+async def record_logout(
+    db: AsyncSession,
+    *,
+    user: User,
+    ip_address: str | None = None,
+) -> None:
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="USER_LOGOUT",
+        entity="user",
+        entity_id=user.id,
+        payload={
+            "username": user.username,
+            "full_name": user.full_name,
+            "role": user.role,
+            "store_name": user.store.name if user.store else None,
+        },
+        ip_address=ip_address,
+    )
+    await db.commit()
 
 
 async def refresh_user_tokens(db: AsyncSession, *, refresh_token: str) -> TokenResponse:
