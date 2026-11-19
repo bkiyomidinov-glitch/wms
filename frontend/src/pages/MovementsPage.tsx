@@ -635,7 +635,7 @@ export function MovementsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {displayedTransactions.map((tx) => {
+                {paginatedTransactions.map((tx) => {
                   const isInbound = tx.tx_type === "INBOUND";
                   return (
                     <tr
@@ -709,6 +709,17 @@ export function MovementsPage() {
             </table>
           )}
         </div>
+
+        {/* Pagination controls */}
+        {displayedTransactions.length > 0 && (
+          <PaginationControls
+            currentPage={currentPage}
+            totalItems={displayedTransactions.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            itemName="операций"
+          />
+        )}
       </div>
 
       {/* 5. Centered Modal «Детали операции» */}
