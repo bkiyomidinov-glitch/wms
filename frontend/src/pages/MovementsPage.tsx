@@ -115,6 +115,10 @@ export function MovementsPage() {
     },
   });
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
+
   // Client-side multi-filter refinement
   const displayedTransactions = useMemo(() => {
     let list = allTransactions;
@@ -140,6 +144,16 @@ export function MovementsPage() {
     }
     return list;
   }, [allTransactions, selectedStoreIds, selectedProductIdsInFilter, selectedProductId, searchQuery]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedProductId, selectedStoreIds, selectedProductIdsInFilter, txTypeFilter]);
+
+  const paginatedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return displayedTransactions.slice(start, start + pageSize);
+  }, [displayedTransactions, currentPage]);
 
   // Selected product object
   const activeProductObj = useMemo(() => {
