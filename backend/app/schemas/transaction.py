@@ -79,6 +79,8 @@ class TransactionRead(BaseModel):
     quantity_base_calculated: Decimal
     stock_before_base: Decimal
     stock_after_base: Decimal
+    balance_before_store: int = 0
+    balance_after_store: int = 0
     performed_by_user_id: UUID
     store_id: UUID | None = None
     counterparty_name: str

@@ -48,6 +48,9 @@ async def logout(
 
 @router.get("/me", response_model=UserSummary)
 async def me(current_user: User = Depends(get_current_user)) -> UserSummary:
+    store_ids = [str(s.id) for s in (getattr(current_user, "stores", []) or [])]
+    if not store_ids and current_user.store_id:
+        store_ids = [str(current_user.store_id)]
     return UserSummary(
         id=str(current_user.id),
         username=current_user.username,
@@ -56,5 +59,7 @@ async def me(current_user: User = Depends(get_current_user)) -> UserSummary:
         shift_name=current_user.shift_name,
         store_id=str(current_user.store_id) if current_user.store_id else None,
         store_name=current_user.store.name if current_user.store else None,
+        store_ids=store_ids,
+        permissions=getattr(current_user, "permissions", {}) or {},
         is_active=current_user.is_active,
     )

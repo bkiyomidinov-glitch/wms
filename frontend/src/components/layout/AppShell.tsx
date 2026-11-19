@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  ArrowLeftRight,
   ClipboardList,
   Layers,
   LogOut,
@@ -9,11 +10,11 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn, ROLE_LABELS } from "@/lib/utils";
-import type { UserRole } from "@/types/api";
 
 export type AppRoute =
   | "terminal"
   | "warehouses"
+  | "movements"
   | "directory"
   | "history"
   | "products"
@@ -24,7 +25,7 @@ interface NavItem {
   id: AppRoute;
   label: string;
   icon: LucideIcon;
-  roles: UserRole[];
+  permissionCheck: (user: any) => boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -32,25 +33,40 @@ const NAV_ITEMS: NavItem[] = [
     id: "terminal",
     label: "ТЕРМИНАЛ",
     icon: ScanBarcode,
-    roles: ["OPERATOR", "MANAGER", "DIRECTOR", "SUPER_ADMIN"],
+    permissionCheck: (u) =>
+      u.role === "SUPER_ADMIN" ||
+      Boolean(u.permissions?.can_inbound) ||
+      Boolean(u.permissions?.can_outbound),
   },
   {
     id: "warehouses",
     label: "СКЛАДЫ",
     icon: Warehouse,
-    roles: ["OPERATOR", "MANAGER", "DIRECTOR", "SUPER_ADMIN"],
+    permissionCheck: (u) =>
+      u.role === "SUPER_ADMIN" || Boolean(u.permissions?.can_view_stock),
+  },
+  {
+    id: "movements",
+    label: "ДВИЖЕНИЕ",
+    icon: ArrowLeftRight,
+    permissionCheck: (u) =>
+      u.role === "SUPER_ADMIN" || Boolean(u.permissions?.can_view_movements),
   },
   {
     id: "directory",
     label: "СПРАВОЧНИК",
     icon: Layers,
-    roles: ["MANAGER", "DIRECTOR", "SUPER_ADMIN"],
+    permissionCheck: (u) =>
+      u.role === "SUPER_ADMIN" ||
+      Boolean(u.permissions?.can_manage_products) ||
+      Boolean(u.permissions?.can_manage_stores) ||
+      Boolean(u.permissions?.can_manage_users),
   },
   {
     id: "history",
     label: "ИСТОРИЯ",
     icon: ClipboardList,
-    roles: ["OPERATOR", "MANAGER", "DIRECTOR", "SUPER_ADMIN"],
+    permissionCheck: () => true,
   },
 ];
 
@@ -70,7 +86,7 @@ export function AppShell({ activeRoute, onNavigate, children }: AppShellProps) {
       ? "directory"
       : activeRoute;
 
-  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(user.role));
+  const visibleItems = NAV_ITEMS.filter((item) => item.permissionCheck(user));
 
   const getInitials = (name: string): string => {
     const parts = name.trim().split(/\s+/);
@@ -86,19 +102,18 @@ export function AppShell({ activeRoute, onNavigate, children }: AppShellProps) {
       <aside className="w-[78px] shrink-0 h-screen fixed left-0 top-0 z-30 bg-white border-r border-slate-200/80 flex flex-col items-center py-4 justify-between select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)]">
         {/* Top: Logo & Nav items */}
         <div className="flex flex-col items-center w-full">
-          {/* Brand Logo & Name (WMS CORE) */}
+          {/* Brand Logo (Pokiza) */}
           <div
             className="flex flex-col items-center cursor-pointer group select-none"
             onClick={() => onNavigate("terminal")}
-            title="WMS Core — Складской учет"
+            title="Pokiza — Складской учет"
           >
-            <div className="w-8 h-8 rounded-lg bg-[#DC2626] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
-              <Warehouse className="h-4 w-4 text-white" strokeWidth={2} />
-            </div>
-            <div className="mt-1 flex items-center justify-center">
-              <span className="text-[10px] font-bold tracking-tight text-[#0F172A] leading-tight">
-                WMS <span className="text-[#DC2626]">CORE</span>
-              </span>
+            <div className="w-11 h-11 rounded-xl bg-white border border-slate-200/90 shadow-2xs p-1 flex items-center justify-center group-hover:border-[#8B1D1D]/50 group-hover:scale-105 transition-all">
+              <img
+                src="/pokiza-logo.png"
+                alt="Pokiza"
+                className="w-full h-full object-contain"
+              />
             </div>
           </div>
 
@@ -125,7 +140,7 @@ export function AppShell({ activeRoute, onNavigate, children }: AppShellProps) {
                 >
                   {/* Left thin accent bar */}
                   {active && (
-                    <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[#8B1D1D] rounded-r" />
+                    <div className="absolute left-0 top-1.5 bottom-1.5 w-[3.5px] bg-[#8B1D1D] rounded-r" />
                   )}
                   <Icon
                     strokeWidth={1.5}

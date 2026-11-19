@@ -31,12 +31,17 @@ export interface UserSummary {
   shift_name: string | null;
   store_id?: string | null;
   store_name?: string | null;
+  store_ids?: string[];
+  permissions?: Record<string, boolean>;
   is_active: boolean;
 }
 
 export interface UserRead extends UserSummary {
   store_id: string | null;
   store?: Store | null;
+  stores?: Store[];
+  store_ids?: string[];
+  permissions?: Record<string, boolean>;
   created_by: string | null;
   created_at: string;
 }
@@ -128,11 +133,13 @@ export interface InventoryTransaction {
   id: string;
   tx_type: TransactionType;
   product_id: string;
-  quantity_entered: string;
+  quantity_entered: string | number;
   unit_id: string;
-  quantity_base_calculated: string;
-  stock_before_base: string;
-  stock_after_base: string;
+  quantity_base_calculated: string | number;
+  stock_before_base: string | number;
+  stock_after_base: string | number;
+  balance_before_store: number;
+  balance_after_store: number;
   performed_by_user_id: string;
   store_id?: string | null;
   counterparty_name: string;
@@ -212,6 +219,8 @@ export interface StoreMovementRow {
   counterparty_name: string;
   quantity_entered: number;
   unit_name: string;
+  balance_before_store?: number;
+  balance_after_store?: number;
   current_store_stock: number;
   base_unit_name: string;
   performed_at: string;
@@ -221,3 +230,39 @@ export interface StoreMovementRow {
   notes: string | null;
 }
 
+export interface StoreProductItem {
+  product_id: string;
+  barcode: string;
+  name: string;
+  sku: string;
+  category_name: string;
+  base_unit_name: string;
+  current_store_stock: number;
+  configured_attributes?: ConfiguredAttribute[];
+  last_operation_at?: string | null;
+  operations_count: number;
+}
+
+export interface StoreInventorySummary {
+  id: string;
+  name: string;
+  code?: string | null;
+  address?: string | null;
+  is_active: boolean;
+  products_count: number;
+  total_stock: number;
+  products: StoreProductItem[];
+}
+
+export interface ProductMovementSummary {
+  product_id: string;
+  product_name: string;
+  barcode: string;
+  sku: string;
+  unit_name: string;
+  total_inbound: number;
+  total_outbound: number;
+  total_stock_all_stores: number;
+  transactions_count: number;
+  transactions: InventoryTransaction[];
+}

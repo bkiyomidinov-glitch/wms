@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Barcode,
   Building2,
   Clock,
+  Lock,
   User as UserIcon,
   X,
 } from "lucide-react";
@@ -27,6 +28,7 @@ import type {
   CustomDictionary,
   InventoryTransaction,
   Product,
+  Store,
   TransactionType,
 } from "@/types/api";
 
@@ -57,6 +59,40 @@ export function OperationModalForm({
 
   // Formatted live timestamp
   const [currentDateTime, setCurrentDateTime] = useState("");
+
+  const { data: allStores = [] } = useQuery<Store[]>({
+    queryKey: ["stores", "list"],
+    queryFn: () => apiRequest<Store[]>("/api/v1/stores"),
+  });
+
+  const availableStores = useMemo(() => {
+    if (!user) return [];
+    if (user.role === "SUPER_ADMIN" || user.role === "DIRECTOR") {
+      return allStores.filter((s) => s.is_active !== false);
+    }
+    const allowed = new Set(user.store_ids || []);
+    if (user.store_id) allowed.add(user.store_id);
+    if (allowed.size === 0) return allStores.filter((s) => s.is_active !== false);
+    return allStores.filter((s) => allowed.has(s.id) && s.is_active !== false);
+  }, [allStores, user]);
+
+  const [selectedStoreId, setSelectedStoreId] = useState<string>("");
+
+  useEffect(() => {
+    if (open) {
+      if (availableStores.length === 1) {
+        setSelectedStoreId(availableStores[0].id);
+      } else if (user?.store_id && availableStores.some((s) => s.id === user.store_id)) {
+        setSelectedStoreId(user.store_id);
+      } else if (availableStores.length > 0) {
+        setSelectedStoreId(availableStores[0].id);
+      }
+    }
+  }, [open, availableStores, user?.store_id]);
+
+  const selectedStore = useMemo(() => {
+    return allStores.find((s) => s.id === selectedStoreId) || null;
+  }, [allStores, selectedStoreId]);
 
   useEffect(() => {
     if (open) {
@@ -149,13 +185,16 @@ export function OperationModalForm({
       }
     }
 
+    const finalStoreId = selectedStoreId || user?.store_id || null;
+    const finalStoreName = selectedStore?.name || user?.store_name || "Центральный склад";
+
     const payload: Record<string, unknown> = {
       tx_type: txType,
       product_id: product.id,
       quantity_entered: qty,
       unit_id: product.base_unit_id,
-      store_id: user?.store_id || null,
-      counterparty_name: user?.store_name || "Центральный склад",
+      store_id: finalStoreId,
+      counterparty_name: finalStoreName,
       custom_attributes: attrValues,
     };
 
@@ -241,9 +280,27 @@ export function OperationModalForm({
                 <Building2 className="h-3 w-3" />
                 {isIncoming ? "Куда (Склад)" : "Откуда (Склад)"}
               </div>
-              <div className="font-semibold text-[#7F1D1D] mt-0.5 truncate">
-                {user?.store_name || "Центральный склад"}
-              </div>
+              {availableStores.length > 1 ? (
+                <div className="mt-1">
+                  <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+                    <SelectTrigger className="h-7 text-xs font-semibold text-[#7F1D1D] bg-white border-slate-200 focus:ring-[#7F1D1D]">
+                      <SelectValue placeholder="Выберите склад..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableStores.map((s) => (
+                        <SelectItem key={s.id} value={s.id} className="text-xs">
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="font-semibold text-[#7F1D1D] mt-0.5 truncate flex items-center gap-1">
+                  <span>{selectedStore?.name || user?.store_name || "Центральный склад"}</span>
+                  <span title="Закрепленный склад"><Lock className="h-3 w-3 text-slate-400 shrink-0" /></span>
+                </div>
+              )}
             </div>
           </div>
 

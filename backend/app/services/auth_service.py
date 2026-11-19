@@ -16,6 +16,9 @@ from app.services.audit_service import record_audit
 
 
 def _build_token_response(user: User) -> TokenResponse:
+    store_ids = [str(s.id) for s in (getattr(user, "stores", []) or [])]
+    if not store_ids and user.store_id:
+        store_ids = [str(user.store_id)]
     return TokenResponse(
         access_token=create_access_token(user.id, user.role, user.username),
         refresh_token=create_refresh_token(user.id),
@@ -27,6 +30,8 @@ def _build_token_response(user: User) -> TokenResponse:
             shift_name=user.shift_name,
             store_id=str(user.store_id) if user.store_id else None,
             store_name=user.store.name if user.store else None,
+            store_ids=store_ids,
+            permissions=getattr(user, "permissions", {}) or {},
             is_active=user.is_active,
         ),
     )

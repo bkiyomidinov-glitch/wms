@@ -6,10 +6,11 @@ from app.models.product import Product, ProductAllowedUnit
 from app.models.store import Store
 from app.models.transaction import InventoryTransaction
 from app.models.unit import UnitOfMeasure
-from app.models.user import User
+from app.models.user import User, UserStore
 
 __all__ = [
     "User",
+    "UserStore",
     "Store",
     "UnitOfMeasure",
     "CustomDictionary",

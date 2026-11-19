@@ -18,10 +18,18 @@ router = APIRouter()
 async def list_stores(
     include_inactive: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> list[StoreRead]:
-    stores = await store_service.list_stores(db, include_inactive=include_inactive)
+    stores = await store_service.list_stores(db, include_inactive=include_inactive, actor=current_user)
     return [StoreRead.model_validate(s) for s in stores]
+
+
+@router.get("/inventory-summary", response_model=list[dict[str, Any]], summary="Stores inventory summary with products")
+async def get_stores_inventory_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    return await store_service.get_stores_inventory_summary(db, actor=current_user)
 
 
 @router.get("/movements", response_model=list[dict[str, Any]], summary="List store stock & movements table")

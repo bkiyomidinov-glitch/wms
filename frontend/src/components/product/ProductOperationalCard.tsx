@@ -7,6 +7,8 @@ interface ProductOperationalCardProps {
   product: Product;
   productAttributes: AttributeDefinition[];
   onStartOperation: (txType: TransactionType) => void;
+  canInbound?: boolean;
+  canOutbound?: boolean;
 }
 
 function formatUnitRu(name: string, code: string): string {
@@ -32,6 +34,8 @@ export function ProductOperationalCard({
   product,
   productAttributes,
   onStartOperation,
+  canInbound = true,
+  canOutbound = true,
 }: ProductOperationalCardProps) {
   const enabledSet = new Set(product.enabled_attribute_ids);
   const visibleAttrs = productAttributes.filter(
@@ -124,28 +128,34 @@ export function ProductOperationalCard({
         </div>
       )}
 
-      {/* 3. Нижняя панель действий (Action Footer — БЕЗ «СВЕТОФОРА» И БЕЗ «КОРРЕКТИРОВКИ») */}
+      {/* 3. Нижняя панель действий */}
       <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-200 flex items-center justify-between">
         <span className="text-xs text-slate-500">
-          Выберите операцию для изменения складского остатка
+          {canInbound || canOutbound
+            ? "Выберите операцию для изменения складского остатка"
+            : "У вас нет прав на проведение операций списания или приемки"}
         </span>
         <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            onClick={() => onStartOperation("INBOUND")}
-            className="h-10 px-6 rounded-lg bg-[#7F1D1D] hover:bg-[#651717] text-white text-sm font-medium shadow-xs flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <ArrowDownToLine className="h-4 w-4" />
-            Принять
-          </Button>
-          <Button
-            type="button"
-            onClick={() => onStartOperation("OUTBOUND")}
-            className="h-10 px-6 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-sm font-medium shadow-2xs flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <ArrowUpFromLine className="h-4 w-4" />
-            Отправить
-          </Button>
+          {canInbound && (
+            <Button
+              type="button"
+              onClick={() => onStartOperation("INBOUND")}
+              className="h-10 px-6 rounded-lg bg-[#7F1D1D] hover:bg-[#651717] text-white text-sm font-medium shadow-xs flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <ArrowDownToLine className="h-4 w-4" />
+              Принять
+            </Button>
+          )}
+          {canOutbound && (
+            <Button
+              type="button"
+              onClick={() => onStartOperation("OUTBOUND")}
+              className="h-10 px-6 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-sm font-medium shadow-2xs flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <ArrowUpFromLine className="h-4 w-4" />
+              Отправить
+            </Button>
+          )}
         </div>
       </div>
     </div>

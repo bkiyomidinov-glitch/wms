@@ -18,6 +18,8 @@ class UserSummary(BaseModel):
     shift_name: str | None = None
     store_id: str | None = None
     store_name: str | None = None
+    store_ids: list[str] = Field(default_factory=list)
+    permissions: dict[str, bool] = Field(default_factory=dict)
     is_active: bool
 
 

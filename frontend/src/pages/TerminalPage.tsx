@@ -12,6 +12,7 @@ import { OperationModalForm } from "@/components/operations/OperationModalForm";
 import { ProductOperationalCard } from "@/components/product/ProductOperationalCard";
 import { Button } from "@/components/ui/button";
 import { apiRequest, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { formatQty } from "@/lib/utils";
 import type {
   AttributeDefinition,
@@ -28,6 +29,7 @@ interface TerminalPageProps {
 }
 
 export function TerminalPage({}: TerminalPageProps = {}) {
+  const { user } = useAuth();
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -197,6 +199,8 @@ export function TerminalPage({}: TerminalPageProps = {}) {
             product={activeProduct}
             productAttributes={productAttrs}
             onStartOperation={handleStartOperation}
+            canInbound={user?.role === "SUPER_ADMIN" || Boolean(user?.permissions?.can_inbound)}
+            canOutbound={user?.role === "SUPER_ADMIN" || Boolean(user?.permissions?.can_outbound)}
           />
         </div>
       ) : (

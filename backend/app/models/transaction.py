@@ -24,6 +24,8 @@ class InventoryTransaction(Base):
     quantity_base_calculated: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     stock_before_base: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     stock_after_base: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    balance_before_store: Mapped[int] = mapped_column(Numeric(14, 0), default=0, nullable=False)
+    balance_after_store: Mapped[int] = mapped_column(Numeric(14, 0), default=0, nullable=False)
     performed_by_user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="RESTRICT"), index=True, nullable=False
     )

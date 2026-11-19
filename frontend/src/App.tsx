@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { DirectoryPage } from "@/pages/DirectoryPage";
 import { JournalPage } from "@/pages/JournalPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { MovementsPage } from "@/pages/MovementsPage";
 import { TerminalPage } from "@/pages/TerminalPage";
 import { WarehousesOverviewPage } from "@/pages/WarehousesOverviewPage";
 
@@ -19,11 +20,21 @@ const queryClient = new QueryClient({
 });
 
 function CoreWorkspace() {
-  const { user, isLoading, hasRole } = useAuth();
+  const { user, isLoading } = useAuth();
   const [route, setRoute] = useState<AppRoute>("terminal");
 
   useEffect(() => {
-    setRoute("terminal");
+    if (!user) return;
+    // Default to first accessible route
+    if (user.role === "SUPER_ADMIN" || user.permissions?.can_inbound || user.permissions?.can_outbound) {
+      setRoute("terminal");
+    } else if (user.permissions?.can_view_stock) {
+      setRoute("warehouses");
+    } else if (user.permissions?.can_view_movements) {
+      setRoute("movements");
+    } else {
+      setRoute("history");
+    }
   }, [user?.id]);
 
   if (isLoading) {
@@ -44,16 +55,19 @@ function CoreWorkspace() {
     if (route === "warehouses") {
       return <WarehousesOverviewPage />;
     }
-    if (route === "directory" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
+    if (route === "movements") {
+      return <MovementsPage />;
+    }
+    if (route === "directory") {
       return <DirectoryPage />;
     }
-    if (route === "products" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
+    if (route === "products") {
       return <DirectoryPage initialTab="products" />;
     }
-    if (route === "stores" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
+    if (route === "stores") {
       return <DirectoryPage initialTab="stores" />;
     }
-    if (route === "users" && hasRole("MANAGER", "DIRECTOR", "SUPER_ADMIN")) {
+    if (route === "users") {
       return <DirectoryPage initialTab="users" />;
     }
     if (route === "history") {
