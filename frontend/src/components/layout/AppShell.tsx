@@ -102,18 +102,19 @@ export function AppShell({ activeRoute, onNavigate, children }: AppShellProps) {
       <aside className="w-[78px] shrink-0 h-screen fixed left-0 top-0 z-30 bg-white border-r border-slate-200/80 flex flex-col items-center py-4 justify-between select-none shadow-[1px_0_4px_rgba(0,0,0,0.02)]">
         {/* Top: Logo & Nav items */}
         <div className="flex flex-col items-center w-full">
-          {/* Brand Logo (Pokiza) */}
+          {/* Brand Logo & Name (WMS CORE) */}
           <div
             className="flex flex-col items-center cursor-pointer group select-none"
             onClick={() => onNavigate("terminal")}
-            title="Pokiza — Складской учет"
+            title="WMS Core — Складской учет"
           >
-            <div className="w-11 h-11 rounded-xl bg-white border border-slate-200/90 shadow-2xs p-1 flex items-center justify-center group-hover:border-[#8B1D1D]/50 group-hover:scale-105 transition-all">
-              <img
-                src="/pokiza-logo.png"
-                alt="Pokiza"
-                className="w-full h-full object-contain"
-              />
+            <div className="w-8 h-8 rounded-lg bg-[#DC2626] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+              <Warehouse className="h-4 w-4 text-white" strokeWidth={2} />
+            </div>
+            <div className="mt-1 flex items-center justify-center">
+              <span className="text-[10px] font-bold tracking-tight text-[#0F172A] leading-tight">
+                WMS <span className="text-[#DC2626]">CORE</span>
+              </span>
             </div>
           </div>
 

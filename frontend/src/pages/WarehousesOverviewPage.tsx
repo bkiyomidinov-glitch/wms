@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  AlertCircle,
+  RotateCw,
   Search,
   X,
   MapPin,
@@ -27,7 +29,12 @@ export function WarehousesOverviewPage() {
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
   // 1. Fetch stores inventory summary
-  const { data: stores = [], isLoading: storesLoading } = useQuery({
+  const {
+    data: stores = [],
+    isLoading: storesLoading,
+    isError: storesError,
+    refetch,
+  } = useQuery({
     queryKey: ["stores", "inventory-summary"],
     queryFn: () => apiRequest<StoreInventorySummary[]>("/api/v1/stores/inventory-summary"),
   });
@@ -91,10 +98,25 @@ export function WarehousesOverviewPage() {
         </p>
       </div>
 
-      {/* Loading state */}
+      {/* Loading & Error states */}
       {storesLoading ? (
         <div className="bg-white border border-slate-200/80 rounded-xl p-12 text-center text-sm text-slate-500 shadow-2xs">
           Загрузка складских данных...
+        </div>
+      ) : storesError ? (
+        <div className="bg-white border border-rose-200 rounded-xl p-8 text-center text-sm shadow-2xs space-y-3">
+          <div className="mx-auto w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center">
+            <AlertCircle className="h-5 w-5" />
+          </div>
+          <p className="text-slate-800 font-medium">Не удалось загрузить данные складов</p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#8B1D1D] text-white text-xs font-medium hover:bg-[#701717] transition-colors cursor-pointer"
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+            Повторить попытку
+          </button>
         </div>
       ) : stores.length === 0 ? (
         <div className="bg-white border border-slate-200/80 rounded-xl p-12 text-center text-sm text-slate-500 shadow-2xs">
