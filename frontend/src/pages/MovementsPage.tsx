@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Warehouse,
 } from "lucide-react";
+import { PaginationControls } from "@/components/common/PaginationControls";
 import { apiRequest } from "@/lib/api";
 import { cn, formatDushanbeDateTime, formatInt } from "@/lib/utils";
 import type {
