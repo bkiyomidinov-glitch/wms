@@ -19,7 +19,9 @@ app/core/security.py
 app/core/timezone.py
 app/db/__init__.py
 app/db/base.py
+app/db/migrate_v2.py
 app/db/seed.py
+app/db/seed_large_dataset.py
 app/db/session.py
 app/domain/__init__.py
 app/domain/enums.py
