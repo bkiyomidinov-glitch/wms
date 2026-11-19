@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -11,6 +11,7 @@ import {
   User as UserIcon,
   X,
 } from "lucide-react";
+import { PaginationControls } from "@/components/common/PaginationControls";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -192,6 +193,8 @@ function buildShortSummary(log: AuditLog): string {
 export function JournalPage() {
   const { user } = useAuth();
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
 
   const {
     data: logs = [],
@@ -203,6 +206,11 @@ export function JournalPage() {
     queryFn: () => apiRequest<AuditLog[]>("/api/v1/audit-logs/my?limit=200"),
     enabled: Boolean(user?.id),
   });
+
+  const paginatedLogs = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return logs.slice(start, start + pageSize);
+  }, [logs, page]);
 
   const renderDetailsModal = () => {
     if (!selectedLog) return null;
