@@ -14,6 +14,7 @@ from app.schemas.passport import (
     InitialReceiptCreate,
     PassportAcceptReceiptCreate,
     PassportDispatchCreate,
+    PassportDispatchResult,
     PassportGenealogyTree,
     PassportRead,
     StorePassportInventorySummary,
@@ -33,14 +34,14 @@ async def create_initial_receipt(
     return await passport_service.create_initial_receipt(db, actor=current_user, data=payload)
 
 
-@router.post("/{passport_id}/dispatch", response_model=PassportRead)
+@router.post("/{passport_id}/dispatch", response_model=PassportDispatchResult)
 async def dispatch_passport(
     passport_id: uuid.UUID,
     payload: PassportDispatchCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> PassportRead:
-    """Отправка ячейки со склада с выбором состояния и контрольным перевесом (IN_TRANSIT)."""
+) -> PassportDispatchResult:
+    """Отправка ячейки со склада / частичное дробление партии (Lot Splitting)."""
     return await passport_service.dispatch_passport(
         db, actor=current_user, passport_id=passport_id, data=payload
     )
