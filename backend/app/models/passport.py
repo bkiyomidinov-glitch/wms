@@ -122,6 +122,12 @@ class Passport(Base):
         "Store", foreign_keys=[pending_target_store_id], lazy="selectin"
     )
     created_by = relationship("User", foreign_keys=[created_by_operator_id], lazy="selectin")
+    root_passport = relationship(
+        "Passport",
+        remote_side=[id],
+        foreign_keys=[root_passport_id],
+        lazy="selectin",
+    )
     parent_passport = relationship(
         "Passport",
         remote_side=[id],
