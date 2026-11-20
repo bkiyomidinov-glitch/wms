@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PassportEventRead(BaseModel):
@@ -63,10 +63,13 @@ class PassportRead(BaseModel):
 
     id: uuid.UUID
     passport_code: str
+    lineage_path: str = ""
     qr_payload: str
+    root_passport_id: uuid.UUID | None = None
     parent_passport_id: uuid.UUID | None = None
     parent_passport_code: str | None = None
     processing_act_id: uuid.UUID | None = None
+    child_seq: int = 0
     product_id: uuid.UUID
     product_name: str
     product_barcode: str
@@ -76,6 +79,7 @@ class PassportRead(BaseModel):
     production_date: date
     current_state: str
     current_product_type: str
+    initial_qty: Decimal = Decimal("0.000")
     current_qty: Decimal
     current_store_id: uuid.UUID
     current_store_name: str
@@ -110,10 +114,27 @@ class InitialReceiptCreate(BaseModel):
 class PassportDispatchCreate(BaseModel):
     target_store_id: uuid.UUID
     state_at_dispatch: str = Field(..., min_length=1)
-    actual_qty_at_dispatch: Decimal = Field(..., gt=0)
+    send_qty: Decimal | None = None
+    actual_qty_at_dispatch: Decimal | None = None
     storage_responsible: str = Field(..., min_length=1)
     notes: str | None = None
     custom_attributes: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_quantity(self) -> "PassportDispatchCreate":
+        qty = self.send_qty or self.actual_qty_at_dispatch
+        if not qty or qty <= Decimal("0"):
+            raise ValueError("Количество для отправки должно быть больше 0")
+        self.send_qty = qty
+        self.actual_qty_at_dispatch = qty
+        return self
+
+
+class PassportDispatchResult(BaseModel):
+    parent_passport: PassportRead | None = None
+    dispatched_passport: PassportRead
+    split_occurred: bool
+    remaining_qty_in_parent: Decimal | None = None
 
 
 class PassportAcceptReceiptCreate(BaseModel):
@@ -142,9 +163,28 @@ class BoningProcessCreate(BaseModel):
     notes: str | None = None
 
 
+class PassportGenealogyNode(BaseModel):
+    id: uuid.UUID
+    passport_code: str
+    lineage_path: str
+    qr_payload: str
+    product_name: str
+    unit_name: str
+    initial_qty: Decimal
+    current_qty: Decimal
+    current_state: str
+    current_product_type: str
+    current_store_name: str
+    current_store_type: str
+    status: str
+    processing_act: ProcessingActRead | None = None
+    children: list["PassportGenealogyNode"] = Field(default_factory=list)
+
+
 class PassportGenealogyTree(BaseModel):
     current: PassportRead
     processing_act: ProcessingActRead | None = None
+    tree_root: PassportGenealogyNode | None = None
     ancestors: list[PassportRead] = Field(default_factory=list)
     descendants: list[PassportRead] = Field(default_factory=list)
 
