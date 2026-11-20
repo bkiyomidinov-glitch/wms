@@ -13,6 +13,7 @@ class Store(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
     code: Mapped[str | None] = mapped_column(String(50), unique=True, index=True, nullable=True)
+    store_type: Mapped[str] = mapped_column(String(32), default="OTHER", nullable=False, index=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
