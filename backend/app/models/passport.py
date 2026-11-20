@@ -117,11 +117,13 @@ class Passport(Base):
         "Passport",
         remote_side=[id],
         foreign_keys=[parent_passport_id],
+        back_populates="child_passports",
         lazy="selectin",
     )
     child_passports = relationship(
         "Passport",
         foreign_keys=[parent_passport_id],
+        back_populates="parent_passport",
         lazy="selectin",
     )
     events: Mapped[list[PassportEvent]] = relationship(

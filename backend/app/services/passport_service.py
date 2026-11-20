@@ -374,6 +374,7 @@ async def dispatch_passport(
     # Update passport
     passport.status = PassportStatus.IN_TRANSIT.value
     passport.pending_target_store_id = target_store.id
+    passport.pending_target_store = target_store
     passport.current_state = new_state
     passport.current_qty = new_qty
     passport.current_storage_responsible = data.storage_responsible.strip()
