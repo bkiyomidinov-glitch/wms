@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Uuid,
@@ -66,13 +67,18 @@ class Passport(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     passport_code: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    lineage_path: Mapped[str] = mapped_column(String(255), index=True, nullable=False, default="")
     qr_payload: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    root_passport_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("passports.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     parent_passport_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("passports.id", ondelete="SET NULL"), nullable=True, index=True
     )
     processing_act_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("processing_acts.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    child_seq: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     product_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -80,6 +86,9 @@ class Passport(Base):
     production_date: Mapped[date] = mapped_column(Date, nullable=False)
     current_state: Mapped[str] = mapped_column(String(100), nullable=False)
     current_product_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    initial_qty: Mapped[Decimal] = mapped_column(
+        Numeric(12, 3), default=Decimal("0.000"), nullable=False
+    )
     current_qty: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     current_store_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("stores.id", ondelete="RESTRICT"), nullable=False, index=True
