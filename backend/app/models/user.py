@@ -36,6 +36,7 @@ class User(Base):
         default=lambda: {
             "can_inbound": True,
             "can_outbound": True,
+            "can_process": True,
             "can_view_stock": True,
             "can_view_movements": True,
             "can_manage_products": False,
