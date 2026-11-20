@@ -494,7 +494,7 @@ export function JournalPage() {
           </div>
         ) : (
           <div>
-            {logs.map((log) => {
+            {paginatedLogs.map((log) => {
               const meta = getActionMeta(log.action);
               const shortSummary = buildShortSummary(log);
               const timeStr = formatDushanbeTimeShort(log.created_at);
@@ -545,6 +545,16 @@ export function JournalPage() {
               );
             })}
           </div>
+        )}
+
+        {logs.length > 0 && (
+          <PaginationControls
+            currentPage={page}
+            totalItems={logs.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            itemName="записей"
+          />
         )}
       </div>
 

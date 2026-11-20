@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Clock,
   Filter,
-  Layers,
   MapPin,
   Package,
   RotateCw,
